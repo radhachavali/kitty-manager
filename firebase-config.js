@@ -9,5 +9,7 @@ window.KM_CONFIG = {
     appId: "1:90111916041:web:c592f506f339c05652a0d8"
   },
   /* The admin (treasurer) Google account. Must match the email in firestore.rules. */
-  owner: "radhakrishna.chavali@gmail.com"
+  owner: "radhakrishna.chavali@gmail.com",
+  /* Phone sign-in for members (SMS code). Turn on Phone in Firebase first, then set this to true. */
+  phone: true
 };

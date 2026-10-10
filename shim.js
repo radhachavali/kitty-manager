@@ -1,7 +1,7 @@
 /* ===== Kitty Manager website adapter =====
    Lets the same app that runs inside Claude run as a normal website on Firebase.
    It supplies window.claude (user, db, downloads) before the app starts.
-   - Sign-in: Google.
+   - Sign-in: Google (admin and anyone), and optionally phone number + SMS code (members only; set phone:true in firebase-config.js).
    - The admin (treasurer) is the account named in firebase-config.js (owner).
    - Everyone else sees only the chits whose join code they typed (access/{uid}).
    Every saved document carries a field _g (its group: a chit id, or "_u_<uid>" for the person's own notes). */
@@ -13,15 +13,80 @@
   var accessG=[],accessWait=[],accessLoaded=false,accessUnsub=null;
 
   function el(h){var d=document.createElement('div');d.innerHTML=h;return d.firstChild;}
+  var BTN='width:100%;min-height:58px;border-radius:16px;border:0;font:800 20px system-ui;cursor:pointer;';
+  var INP='width:100%;box-sizing:border-box;min-height:56px;border-radius:14px;border:2px solid #eadfd6;background:#fff;color:#2a1f2d;font:700 22px system-ui;padding:0 14px;text-align:center;margin-bottom:12px';
+  var confirmRes=null,rcv=null,phoneOn=!!CFG.phone;
+  function gq(i){return gate.querySelector(i);}
   function showGate(msg,busy){
     if(!gate){
-      gate=el('<div id="kmgate" style="position:fixed;inset:0;z-index:100;background:#fbf6f1;color:#2a1f2d;display:flex;align-items:center;justify-content:center;padding:24px;font:18px/1.5 system-ui,-apple-system,Segoe UI,Roboto,sans-serif"><div style="max-width:420px;width:100%;text-align:center"><div style="font-size:54px">💰</div><h1 style="font-size:32px;margin:6px 0">Kitty Manager</h1><p style="color:#6f6270;margin:0 0 22px">Fair, clear and shared. Sign in to open your chit.</p><button id="kmsign" style="width:100%;min-height:58px;border-radius:16px;border:0;background:#7a2e6e;color:#fff;font:800 20px system-ui;cursor:pointer">Sign in with Google</button><p id="kmmsg" style="color:#b3261e;font-weight:700;min-height:24px;margin-top:14px"></p></div></div>');
+      gate=el('<div id="kmgate" style="position:fixed;inset:0;z-index:100;background:#fbf6f1;color:#2a1f2d;display:flex;align-items:center;justify-content:center;padding:24px;font:18px/1.5 system-ui,-apple-system,Segoe UI,Roboto,sans-serif"><div style="max-width:420px;width:100%;text-align:center"><div style="font-size:54px">💰</div><h1 style="font-size:32px;margin:6px 0">Kitty Manager</h1><p style="color:#6f6270;margin:0 0 22px">Fair, clear and shared. Sign in to open your chit.</p>'
+        +'<div id="kmmain"><button id="kmsign" style="'+BTN+'background:#7a2e6e;color:#fff">Sign in with Google</button>'
+        +(phoneOn?'<button id="kmphone" style="'+BTN+'background:#fffdfb;color:#7a2e6e;border:2px solid #7a2e6e;margin-top:12px">Use my phone number</button>':'')+'</div>'
+        +'<div id="kmph" style="display:none"><p style="margin:0 0 8px;font-weight:700">Your mobile number</p><input id="kmnum" type="tel" inputmode="tel" autocomplete="tel" placeholder="+91 98765 43210" style="'+INP+'"><button id="kmsend" style="'+BTN+'background:#7a2e6e;color:#fff">Send code</button><button id="kmback1" style="background:none;border:0;color:#6f6270;font:700 16px system-ui;margin-top:10px;cursor:pointer">Back</button></div>'
+        +'<div id="kmcd" style="display:none"><p id="kmcdt" style="margin:0 0 8px;font-weight:700">Type the 6-digit code</p><input id="kmcode" type="tel" inputmode="numeric" maxlength="6" autocomplete="one-time-code" placeholder="••••••" style="'+INP+';letter-spacing:8px"><button id="kmver" style="'+BTN+'background:#7a2e6e;color:#fff">Confirm</button><button id="kmback2" style="background:none;border:0;color:#6f6270;font:700 16px system-ui;margin-top:10px;cursor:pointer">Use a different number</button></div>'
+        +'<div id="kmrc"></div><p id="kmmsg" style="color:#b3261e;font-weight:700;min-height:24px;margin-top:14px"></p></div></div>');
       document.body.appendChild(gate);
-      gate.querySelector('#kmsign').onclick=function(){signIn();};
+      gq('#kmsign').onclick=function(){signIn();};
+      if(phoneOn){
+        gq('#kmphone').onclick=function(){pane('ph');};
+        gq('#kmback1').onclick=function(){pane('main');};
+        gq('#kmback2').onclick=function(){pane('ph');};
+        gq('#kmsend').onclick=sendCode;
+        gq('#kmver').onclick=verifyCode;
+      }
     }
     gate.style.display='flex';
-    var m=gate.querySelector('#kmmsg');if(m)m.textContent=msg||'';
-    var b=gate.querySelector('#kmsign');if(b){b.disabled=!!busy;b.textContent=busy?'Please wait…':'Sign in with Google';}
+    var m=gq('#kmmsg');if(m)m.textContent=msg||'';
+    var b=gq('#kmsign');if(b){b.disabled=!!busy;b.textContent=busy?'Please wait…':'Sign in with Google';}
+    ['#kmphone','#kmsend','#kmver'].forEach(function(i){var x=gq(i);if(x)x.disabled=!!busy;});
+  }
+  function pane(n){
+    gq('#kmmain').style.display=n==='main'?'block':'none';
+    gq('#kmph').style.display=n==='ph'?'block':'none';
+    gq('#kmcd').style.display=n==='cd'?'block':'none';
+    gq('#kmmsg').textContent='';
+  }
+  /* Phone number: accepts 10-digit Indian numbers or full +country numbers */
+  function fixPhone(v){
+    v=String(v||'').replace(/[\s\-().]/g,'');
+    if(/^\+\d{8,15}$/.test(v))return v;
+    if(/^00\d{8,15}$/.test(v))return '+'+v.slice(2);
+    if(/^91\d{10}$/.test(v))return '+'+v;
+    if(/^0?[6-9]\d{9}$/.test(v))return '+91'+v.replace(/^0/,'');
+    return '';
+  }
+  function resetRc(){try{if(rcv){rcv.clear();}}catch(e){}rcv=null;var h=gq('#kmrc');if(h)h.innerHTML='';}
+  function sendCode(){
+    var num=fixPhone(gq('#kmnum').value);
+    if(!num){showGate('Please type your 10-digit mobile number.');return;}
+    showGate('',true);
+    try{
+      resetRc();
+      var h=document.createElement('div');gq('#kmrc').appendChild(h);
+      rcv=new firebase.auth.RecaptchaVerifier(h,{size:'invisible'});
+      auth.signInWithPhoneNumber(num,rcv).then(function(c){
+        confirmRes=c;showGate('');gq('#kmcdt').textContent='Type the 6-digit code sent to '+num;pane('cd');gq('#kmcode').value='';gq('#kmcode').focus();
+      }).catch(function(e){resetRc();showGate(phoneErr(e));});
+    }catch(e){resetRc();showGate(phoneErr(e));}
+  }
+  function verifyCode(){
+    var c=String(gq('#kmcode').value||'').replace(/\D/g,'');
+    if(c.length!==6){showGate('Please type the 6-digit code.');return;}
+    if(!confirmRes){showGate('Please ask for a new code.');pane('ph');return;}
+    showGate('',true);
+    confirmRes.confirm(c).catch(function(e){showGate(phoneErr(e));});
+  }
+  function phoneErr(e){
+    var c=(e&&e.code)||'';
+    if(c==='auth/invalid-phone-number')return 'That number does not look right. Please check it.';
+    if(c==='auth/invalid-verification-code')return 'That code is wrong. Please try again.';
+    if(c==='auth/code-expired')return 'The code expired. Please ask for a new one.';
+    if(c==='auth/too-many-requests')return 'Too many tries. Please wait a while and try again.';
+    if(c==='auth/quota-exceeded')return 'Text messages are over the limit for today. Please try Google sign-in or try tomorrow.';
+    if(c==='auth/operation-not-allowed')return 'Phone sign-in is not turned on yet. Please use Google sign-in.';
+    if(c==='auth/unauthorized-domain')return 'This website address is not allowed yet. The admin must add it in Firebase, Authentication, Settings, Authorized domains.';
+    if(c==='auth/captcha-check-failed'||c==='auth/internal-error')return 'Could not verify this browser. Please reload and try again.';
+    return 'Could not sign in. '+String((e&&e.message)||c).slice(0,120);
   }
   function hideGate(){if(gate)gate.style.display='none';}
   function signIn(){

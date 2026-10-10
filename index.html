@@ -862,7 +862,7 @@ function agreementText(c){
   L.push('Treasurer: '+mname(c,c.tre)+'.'+(c.cos?' Co-signer: '+mname(c,c.cos)+'.':''));
   L.push('Contributions are due on day '+r.due+' of each month. There is a grace period of '+r.grace+' days.'+(r.fineType==='fixed'?' A late fine of '+fmtM(r.fineVal,c.cur)+' applies after grace.':r.fineType==='pct'?' A late fine of '+r.fineVal+'% of the contribution applies after grace.':' There is no late fine.'));
   L.push('The winner of each month is chosen by lottery only, '+(r.drawMode==='month'?'drawn each month.':'drawn once for all '+N(c)+' months before the year starts.')+' Every share wins once.');
-  if(winMode(c))L.push('The winner of each month collects the money directly from the other members. Every online payment needs a transaction ID'+(LITE?'':' and a screenshot')+'. The winner confirms each payment and the treasurer can step in. Everyone can see who has paid.');
+  if(winMode(c))L.push('The winner of each month collects the money directly from the other members. Every online payment needs a screenshot, either the UPI payment or the WhatsApp confirmation. The winner confirms each payment and the treasurer can step in. Everyone can see who has paid.');
   else L.push('The winner is paid on day '+r.payDay+'. '+(r.payRule==='part'?'The payout is whatever has been collected.':'The payout is made when the whole pool is collected.'));
   L.push('Members who have already won keep paying every month until the end of the year.');
   L.push('These rules are locked for '+N(c)+' months once the treasurer starts the '+w+'.');
@@ -1004,7 +1004,7 @@ function viewWiz(){
     h+='<div class="notice info" id="poolLine">'+poolLineHtml(w)+'</div>';
     h+='<div class="row"><label class="f grow">Due on day<select data-w="due">'+numOpts(1,28,w.due)+'</select></label><label class="f grow">Grace days<select data-w="grace">'+numOpts(0,10,w.grace)+'</select></label><label class="f grow">Payout day<select data-w="payDay">'+numOpts(1,28,w.payDay)+'</select></label></div>';
     h+='<div class="f">Who collects each month’s money?</div>'+chipsOf('collect',[['winner','The winner collects directly'],['treasurer','The treasurer collects']]);
-    h+=(w.collect==='winner'?'<div class="small mute">The other members pay the month’s winner directly. Each online payment needs a transaction ID'+(LITE?'':' and a screenshot')+'. The winner confirms it and the treasurer can step in. Everyone sees who has paid.</div>':'<div class="f">Payout to the winner</div>'+chipsOf('payRule',[['full','When the whole pool is collected'],['part','Whatever is collected']]));
+    h+=(w.collect==='winner'?'<div class="small mute">The other members pay the month’s winner directly. Each online payment needs a screenshot, either the UPI payment or the WhatsApp confirmation. The winner confirms it and the treasurer can step in. Everyone sees who has paid.</div>':'<div class="f">Payout to the winner</div>'+chipsOf('payRule',[['full','When the whole pool is collected'],['part','Whatever is collected']]));
     h+='<div class="f">Late fine</div>'+chipsOf('fineType',[['none','No fine'],['fixed','Fixed amount'],['pct','Percent']]);
     if(w.fineType!=='none')h+='<label class="f">'+(w.fineType==='fixed'?'Fine amount':'Fine percent')+'<input data-w="fineVal" inputmode="decimal" value="'+esc(w.fineVal)+'"></label>';
     h+='</div>';
@@ -1480,24 +1480,23 @@ function paysheetW(c,mid,m,rest,today){
   var actor=!self&&(isTre(c)||w===myId(c));
   if(actor&&mid!==w){
     S.sheet={t:'pay',mid:mid,m:m,paid:true};
-    sheet('<div class="stack"><h2>Paid: '+esc(mname(c,mid))+'</h2><div class="small mute">'+monthLabel(c,m)+' \u00B7 to '+esc(mname(c,w))+' \u00B7 still to pay '+esc(fmtM(rest,c.cur))+'</div><label class="f">Amount paid<input id="pamt" inputmode="decimal" value="'+esc(plainNum(rest,c.cur))+'"></label><label class="f">Date<input id="pdate" type="date" value="'+today+'" max="'+today+'"></label><label class="f">Proof<select id="pproof"><option value="shot">'+(LITE?'UPI or bank transfer, with reference ID':'UPI screenshot')+'</option><option value="whatsapp">WhatsApp confirmation provided</option></select></label><div id="pshotbox">'+fileBtn('pshotin','Take or choose screenshot','',false)+'<div id="pshotname" class="small mute"></div></div><label class="f">Reference ID, optional<input id="pref" maxlength="40" autocomplete="off"></label><label class="f">Note, optional<input id="pnote" maxlength="80"></label><div class="small mute">When you save, this payment counts as paid straight away. It is written in the log with your name.</div><div id="serr"></div><div class="row"><button class="go" style="flex:1" data-act="paysave">Save as paid</button><button class="btn" data-act="close">Cancel</button></div></div>');
+    sheet('<div class="stack"><h2>Paid: '+esc(mname(c,mid))+'</h2><div class="small mute">'+monthLabel(c,m)+' \u00B7 to '+esc(mname(c,w))+' \u00B7 still to pay '+esc(fmtM(rest,c.cur))+'</div><label class="f">Amount paid<input id="pamt" inputmode="decimal" value="'+esc(plainNum(rest,c.cur))+'"></label><label class="f">Date<input id="pdate" type="date" value="'+today+'" max="'+today+'"></label><label class="f">Proof<select id="pproof"><option value="shot">'+'UPI screenshot'+'</option><option value="whatsapp">WhatsApp confirmation provided</option></select></label><div id="pshotbox">'+fileBtn('pshotin','Take or choose screenshot','',false)+'<div id="pshotname" class="small mute"></div></div><label class="f">Reference ID, optional<input id="pref" maxlength="40" autocomplete="off"></label><label class="f">Note, optional<input id="pnote" maxlength="80"></label><div class="small mute">When you save, this payment counts as paid straight away. It is written in the log with your name.</div><div id="serr"></div><div class="row"><button class="go" style="flex:1" data-act="paysave">Save as paid</button><button class="btn" data-act="close">Cancel</button></div></div>');
     return;
   }
   var pi=S.D.pinfo[c.id+'_'+w];
   sheet('<div class="stack"><h2>'+(self?'I paid':'Payment from '+esc(mname(c,mid)))+'</h2><div class="notice info small">Pay <b>'+esc(mname(c,w))+'</b>, the winner of '+monthLabel(c,m)+', directly.'+(pi&&pi.text?'<br>Pay to: <b>'+esc(pi.text)+'</b>':'')+'</div><div class="small mute">Still to pay '+esc(fmtM(rest,c.cur))+'</div>'+
    '<label class="f">Amount<input id="pamt" inputmode="decimal" value="'+esc(plainNum(rest,c.cur))+'"></label><label class="f">Date<input id="pdate" type="date" value="'+today+'" max="'+today+'"></label>'+
    '<label class="f">How<select id="pmeth"><option>UPI or bank transfer</option><option>Cash</option><option>Other</option></select></label>'+
-   '<label class="f">Transaction or reference ID<input id="pref" maxlength="40" autocomplete="off" placeholder="from your payment app"></label>'+
-   (LITE?'':'<div class="f">Screenshot of the payment</div>'+fileBtn('pshotin','Take or choose screenshot','',false)+'<div id="pshotname" class="small mute"></div>')+
-   '<label class="f">Note, optional<input id="pnote" maxlength="80"></label><div class="small mute">Online payments need the reference ID'+(LITE?'':' and a screenshot')+'. For cash, write a note and '+esc(mname(c,w))+' will confirm it.</div><div id="serr"></div><div class="row"><button class="go" style="flex:1" data-act="paysave">Save</button><button class="btn" data-act="close">Cancel</button></div></div>');
+   '<label class="f">Transaction or reference ID, optional<input id="pref" maxlength="40" autocomplete="off" placeholder="if you have it"></label>'+
+   '<div class="f">Screenshot of the payment (UPI or WhatsApp)</div>'+fileBtn('pshotin','Take or choose screenshot','',false)+'<div id="pshotname" class="small mute"></div>'+
+   '<label class="f">Note, optional<input id="pnote" maxlength="80"></label><div class="small mute">Online payments need a screenshot, either the UPI payment or the WhatsApp confirmation. The reference ID is optional. For cash, write a note. '+esc(mname(c,w))+' will confirm it.</div><div id="serr"></div><div class="row"><button class="go" style="flex:1" data-act="paysave">Save</button><button class="btn" data-act="close">Cancel</button></div></div>');
 }
 function paysaveW(c,s,amt,date){
   var w=winnerMid(c,s.m);if(!w)return serr('The winner is not drawn yet.');
   if(s.mid===w)return serr('The winner does not pay herself.');
   if(s.paid){
     var pf=val('pproof')||'shot',ref2=val('pref').trim(),note2=val('pnote').trim(),f2=$('#pshotin')&&$('#pshotin').files&&$('#pshotin').files[0];
-    if(LITE&&pf==='shot'&&!ref2)return serr('Type the transaction or reference ID, or choose WhatsApp confirmation provided.');
-    if(!LITE&&pf==='shot'&&!f2)return serr('Add the UPI screenshot, or choose WhatsApp confirmation provided.');
+    if(pf==='shot'&&!f2)return serr('Add the UPI screenshot, or choose WhatsApp confirmation provided.');
     if(s.busy)return;s.busy=true;
     var id2=uid(),who=myId(c)||c.tre,role=isTre(c)?'treasurer':'winner';
     var fin2=function(shot){
@@ -1510,7 +1509,7 @@ function paysaveW(c,s,amt,date){
     return;
   }
   var meth=val('pmeth'),ref=val('pref').trim(),note=val('pnote').trim(),cash=meth==='Cash',f=$('#pshotin')&&$('#pshotin').files&&$('#pshotin').files[0];
-  if(!cash){if(!ref)return serr('Type the transaction or reference ID.');if(!f&&!LITE)return serr('Add a screenshot of the payment.');}
+  if(!cash){if(!f)return serr('Add a screenshot of the payment. A UPI or WhatsApp screenshot is fine.');}
   else if(!note)return serr('For cash, write a short note, for example where you handed it over.');
   if(ref){var dup=list('pays').some(function(p){return p.cid===c.id&&p.ref&&p.ref.toLowerCase()===ref.toLowerCase()&&p.st!=='rejected';});if(dup)return serr('This reference ID was already used in this '+wordOf(c).toLowerCase()+'. Please check it.');}
   if(s.busy)return;s.busy=true;
@@ -3546,7 +3545,7 @@ ACT.skuse=function(t,id){
   chPostSakhi(p.id,'use_'+w+'_'+Date.now().toString(36),'✅ '+(w==='place'?'Place set: '+n.place:'Dress code set: '+n.dress));
   toast('Saved');
 };
-/* ===== LITE edition: no chat, no photo sharing ===== */
+/* ===== LITE edition: no chat, no photo sharing. Payment-proof screenshots stay (UPI or WhatsApp). ===== */
 if(LITE){
   var NOP=function(){};
   chatsBtn=function(){return '';};
@@ -3555,9 +3554,119 @@ if(LITE){
   chPostSakhi=NOP;chPostSk=NOP;chPost=NOP;chPostDm=NOP;
   ACT.chatopen=NOP;ACT.inbox=NOP;ACT.chnew=NOP;ACT.skuse=NOP;
   photosCard=function(){return '';};
-  fileBtn=function(){return '';};
-  ACT.pickfile=NOP;ACT.phview=NOP;ACT.bphoto=NOP;ACT.shot=NOP;
+  var fileBtn0=fileBtn;
+  fileBtn=function(id){return id==='pshotin'?fileBtn0.apply(null,arguments):'';};
+  ACT.phview=NOP;ACT.bphoto=NOP;
   if(S.tab==='chat')S.tab='month';
+
+  /* ---------- LITE fix 1: Paste place takes the real name from a Google Maps share ---------- */
+  parsePlace=function(t){
+    var m=/https?:\/\/\S+/.exec(String(t||''));if(!m)return null;
+    var url=m[0].replace(/[)\].,;]+$/,''),before=t.slice(0,m.index).split(/\n/).map(function(x){return x.trim();}).filter(Boolean);
+    var name=(before[0]||'').replace(/\s+[-–|]\s+.*$/,'').replace(/\s*,.*$/,'').trim();
+    if(!name){
+      try{
+        var u=decodeURIComponent(url),pm=/\/maps\/place\/([^\/@?]+)/.exec(u)||/[?&](?:q|query)=([^&]+)/.exec(u);
+        if(pm){var q=pm[1].replace(/\+/g,' ').trim();if(!/^-?\d+(\.\d+)?,\s*-?\d+/.test(q))name=q;}
+      }catch(e){}
+    }
+    return {name:name.slice(0,60),url:url};
+  };
+  pgsApply=function(t){
+    var p=parsePlace(t),i=document.getElementById('pplace');if(!p||!i)return false;
+    if(S.sheet)S.sheet.maps=p.url;
+    var n=document.getElementById('pmapsnote');
+    if(p.name){i.value=p.name;if(n)n.textContent='✓ Place and Google Maps link saved. Everyone can tap and open it.';}
+    else{i.value='';if(n)n.textContent='✓ Google Maps link saved. Now type the place name above, for example the cafe name.';try{i.focus();}catch(e){}}
+    var b=document.getElementById('pplsug');if(b)b.innerHTML='';pgsRefresh();return true;
+  };
+  /* the Place box must accept a long Maps share text, then keep only the short name */
+  document.addEventListener('focusin',function(e){if(e.target&&e.target.id==='pplace')e.target.setAttribute('maxlength','600');},true);
+  document.addEventListener('input',function(e){var el=e.target;if(el&&el.id==='pplace'&&!/https?:\/\//.test(el.value)&&el.value.length>60)el.value=el.value.slice(0,60);},true);
+  /* typing the name after pasting a link must not drop the link */
+  document.addEventListener('input',function(e){var el=e.target;if(el&&el.id==='pplace'&&S.sheet&&S.sheet.maps&&el.value&&!/https?:\/\//.test(el.value))e.stopImmediatePropagation();},true);
+
+  /* ---------- LITE fix 2: edit a party and add the place after it is created ---------- */
+  var canEditParty=function(p){return !S.ro&&!!p&&!p.archived&&(canDelParty(p)||S.mode==='local'||!!S.owner);};
+  var partyEventBase=partyEvent;
+  partyEvent=function(p,me,pc,rs,bills){
+    var h=partyEventBase(p,me,pc,rs,bills);
+    if(!canEditParty(p))return h;
+    if(!p.place)h=h.replace('<span class="mute">Place not added yet</span>','<span class="mute">Place not added yet</span> <button class="btn sm" data-act="pedit">+ Add place</button>');
+    var k=h.lastIndexOf('</div>');
+    return h.slice(0,k)+'<button class="btn" data-act="pedit">✏️ Edit party details</button>'+h.slice(k);
+  };
+  ACT.pedit=function(){
+    var p=P();if(!p||!canEditParty(p))return;
+    S.sheet={t:'pedit',pid:p.id,maps:p.maps||''};
+    sheet('<div class="stack"><h2>Edit party</h2><label class="f">Party name<input id="pname" maxlength="40" value="'+esc(p.name||'')+'"></label>'
+     +'<label class="f">Place<input id="pplace" maxlength="600" value="'+esc(p.place||'')+'" placeholder="Type, or paste from Google Maps" autocomplete="off"></label>'
+     +'<div id="pmapsnote" class="tiny mute">'+(p.maps?'✓ Google Maps link saved. Everyone can tap and open it.':'')+'</div>'
+     +'<div class="row" style="flex-wrap:nowrap"><a id="pgs" class="btn sm" style="flex:1;text-decoration:none;display:flex;justify-content:center;align-items:center" target="_blank" rel="noopener" href="#" data-act="pgs">🔍 Search on Google</a><button class="btn sm" style="flex:1" data-act="pgpaste">📋 Paste place</button></div>'
+     +'<div class="tiny mute">In Google Maps, pick the place, tap Share, then Copy. Come back here and tap Paste place.</div>'
+     +'<label class="f">Planned budget (total), optional<input id="pbud" type="number" inputmode="numeric" min="0" max="1000000" value="'+(+p.budget||'')+'"></label>'
+     +'<label class="f">Dress idea, optional<input id="pdress" maxlength="40" value="'+esc(p.dress||'')+'"></label>'
+     +'<div class="small mute">To change the date or time, use Reschedule.</div><div id="serr"></div>'
+     +'<div class="row"><button class="go" style="flex:1" data-act="pedit2">Save</button><button class="btn" data-act="close">Cancel</button></div></div>');
+    setTimeout(pgsRefresh,30);
+  };
+  ACT.pedit2=function(){
+    var p=P();if(!p||!canEditParty(p)||!S.sheet||S.sheet.t!=='pedit')return;
+    var name=val('pname').trim();if(!name)return serr('Give the party a name.');
+    var place=val('pplace').trim(),maps=place?(S.sheet.maps||''):'';
+    var np=Object.assign({},p,{name:name,place:place,maps:maps,budget:Math.max(0,Math.min(1000000,Math.round(+val('pbud'))||0)),dress:val('pdress').trim()});delete np.id;
+    if(!np.dress)delete np.dress;
+    put('parties',p.id,np);closeSheet();toast('Party updated');
+  };
+
+  /* ---------- LITE fix 3: Sakhi works on the website without Claude (simple helper, no AI) ---------- */
+  var skSendBase=ACT.sksendtext;
+  var skPlacesIdeas=[['Cafe with private seating','Quiet corner, easy to talk'],['Garden or terrace cafe','Open air, good for daytime'],['Restaurant with a family room','Space for the whole group'],['Rooftop cafe','Nice view, check the weather'],['Community hall or clubhouse','Cheaper, bring your own snacks']];
+  var skNum=function(t){var m=String(t).match(/\d[\d,]*(\.\d+)?/g)||[];return m.map(function(x){return +x.replace(/,/g,'');});};
+  var skShowPlaces=function(area,budget){
+    SK.msgs.push({r:'c',k:'places',d:{area:area,options:skPlacesIdeas.map(function(o){return {name:o[0],why:o[1]};})}});
+    skAdd('a','Tap Check on Google Maps for any idea, pick a real place you like, then tap Share and Copy. In the party form, tap Paste place.'+(budget?' Your planned total is about ₹'+budget+'.':''));
+  };
+  var skOffline=function(text){
+    text=String(text||'').slice(0,500);if(!text)return;
+    if(!SK.open)ACT.skopen();
+    SK.msgs.push({r:'u',t:text});
+    var low=text.toLowerCase(),nums=skNum(text);
+    if(SK.ask&&SK.ask.k==='area'){var b=SK.ask.budget;SK.ask=null;skList();skShowPlaces(text.trim().slice(0,40),b);return;}
+    if(SK.ask&&SK.ask.k==='split'){SK.ask=null;if(nums.length>=2&&nums[1]>0){skList();skAdd('a','₹'+nums[0]+' shared between '+nums[1]+' adults is about ₹'+Math.ceil(nums[0]/nums[1])+' each. Children are not charged.');return;}}
+    var bm=/budget is about\s*(\d[\d,]*)/.exec(low),budget=bm?bm[1].replace(/,/g,''):'';
+    if(/place|cafe|restaurant|venue|where/.test(low)){
+      var am=/\b(?:in|near|at|around)\s+([a-z][a-z .\-]{2,30})$/i.exec(text.replace(/[.!?]+$/,''));
+      if(am&&!/ask me/.test(low)){skList();skShowPlaces(am[1].trim(),budget);return;}
+      SK.ask={k:'area',budget:budget};skList();skAdd('a','Which area or locality is the party in? For example Madhapur, Kondapur or Banjara Hills.');return;
+    }
+    if(/\btea\b|samosa/.test(low)){skList();ACT.skchip(null,'tea');return;}
+    if(/\bhost/.test(low)){
+      skList();var c=(typeof G==='function')?G():null;
+      if(!c){skAdd('a','Open your chit first, then ask me again. I look at who has already hosted.');return;}
+      var hosted={};list('parties').forEach(function(q){if(q.cid===c.id&&q.by)hosted[q.by]=1;});
+      var left=c.members.filter(function(m){return !hosted[m.id];}).map(function(m){return m.name;});
+      skAdd('a',left.length?'Not hosted yet: '+left.join(', ')+'. This is only a suggestion. The group decides.':'Everyone has hosted once. You can start a new round. The group decides who goes first.');return;
+    }
+    if(/split|share|cost|bill|expense|spend/.test(low)){
+      if(nums.length>=2&&nums[1]>0&&!/please explain/.test(low)){skList();skAdd('a','₹'+nums[0]+' shared between '+nums[1]+' adults is about ₹'+Math.ceil(nums[0]/nums[1])+' each. Children are not charged.');return;}
+      skList();skAdd('a','The party cost is shared equally between the adults who said Yes. Children are not charged. If the spending goes over the planned budget, the extra is shared equally too. To change who is counted, update each person’s Yes or No on the party page.');
+      SK.ask={k:'split'};skAdd('a','Want a quick sum? Type the total and the number of adults, for example 5000 and 8.');return;
+    }
+    if(/kid|child/.test(low)){skList();skAdd('a',skt('kidsfb'));return;}
+    if(/dress|theme|colour|color/.test(low)){skList();ACT.skchip(null,'dress');return;}
+    if(/\bgames?\b|\bplay\b/.test(low)){skList();ACT.skchip(null,'game');return;}
+    if(/quote|inspir|kind word/.test(low)){skList();ACT.skchip(null,'quote');return;}
+    if(/chit/.test(low)&&/start|new|create/.test(low)){skList();ACT.skclose();ACT.newchit();return;}
+    if(/party/.test(low)){skList();ACT.skclose();ACT.newparty({getAttribute:function(){return null;}});return;}
+    skList();skAdd('a','I am a simple helper on the website. I can help with: places for a party, a dress idea, a game, a kind quote, kids at the party, sharing the party cost, who hosts next, and Tea and Samosa days. Tap one of the buttons above, or type one of these words.');
+  };
+  ACT.sksendtext=async function(text){
+    if(SK.busy)return;
+    var sm=await skSample();
+    if(sm)return skSendBase(text);
+    skOffline(text);
+  };
 }
 /* ===== website-only changes (this file is inside the app, after the app code) ===== */
 if(window.__KMW){
