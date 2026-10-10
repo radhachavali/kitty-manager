@@ -3574,7 +3574,7 @@ if(LITE){
   };
   pgsApply=function(t){
     var p=parsePlace(t),i=document.getElementById('pplace');if(!p||!i)return false;
-    if(S.sheet)S.sheet.maps=p.url;
+    if(S.sheet){S.sheet.maps=p.url;S.sheet.keep=!p.name;}
     var n=document.getElementById('pmapsnote');
     if(p.name){i.value=p.name;if(n)n.textContent='✓ Place and Google Maps link saved. Everyone can tap and open it.';}
     else{i.value='';if(n)n.textContent='✓ Google Maps link saved. Now type the place name above, for example the cafe name.';try{i.focus();}catch(e){}}
@@ -3584,7 +3584,7 @@ if(LITE){
   document.addEventListener('focusin',function(e){if(e.target&&e.target.id==='pplace')e.target.setAttribute('maxlength','600');},true);
   document.addEventListener('input',function(e){var el=e.target;if(el&&el.id==='pplace'&&!/https?:\/\//.test(el.value)&&el.value.length>60)el.value=el.value.slice(0,60);},true);
   /* typing the name after pasting a link must not drop the link */
-  document.addEventListener('input',function(e){var el=e.target;if(el&&el.id==='pplace'&&S.sheet&&S.sheet.maps&&el.value&&!/https?:\/\//.test(el.value))e.stopImmediatePropagation();},true);
+  document.addEventListener('input',function(e){var el=e.target;if(el&&el.id==='pplace'&&S.sheet&&S.sheet.keep&&S.sheet.maps&&el.value&&!/https?:\/\//.test(el.value))e.stopImmediatePropagation();},true);
 
   /* ---------- LITE fix 2: edit a party and add the place after it is created ---------- */
   var canEditParty=function(p){return !S.ro&&!!p&&!p.archived&&(canDelParty(p)||S.mode==='local'||!!S.owner);};
@@ -3600,10 +3600,10 @@ if(LITE){
     var p=P();if(!p||!canEditParty(p))return;
     S.sheet={t:'pedit',pid:p.id,maps:p.maps||''};
     sheet('<div class="stack"><h2>Edit party</h2><label class="f">Party name<input id="pname" maxlength="40" value="'+esc(p.name||'')+'"></label>'
-     +'<label class="f">Place<input id="pplace" maxlength="600" value="'+esc(p.place||'')+'" placeholder="Type, or paste from Google Maps" autocomplete="off"></label>'
+     +'<label class="f">Place<input id="pplace" maxlength="600" value="'+esc(p.place||'')+'" placeholder="Search a place, or paste a Google Maps link" autocomplete="off"></label>'
      +'<div id="pmapsnote" class="tiny mute">'+(p.maps?'✓ Google Maps link saved. Everyone can tap and open it.':'')+'</div>'
-     +'<div class="row" style="flex-wrap:nowrap"><a id="pgs" class="btn sm" style="flex:1;text-decoration:none;display:flex;justify-content:center;align-items:center" target="_blank" rel="noopener" href="#" data-act="pgs">🔍 Search on Google</a><button class="btn sm" style="flex:1" data-act="pgpaste">📋 Paste place</button></div>'
-     +'<div class="tiny mute">In Google Maps, pick the place, tap Share, then Copy. Come back here and tap Paste place.</div>'
+     +'<div class="row" style="flex-wrap:nowrap"><a id="pgs" class="btn sm" style="flex:1;text-decoration:none;display:flex;justify-content:center;align-items:center" target="_blank" rel="noopener" href="#" data-act="pgs">\uD83D\uDD0D Search on Google Maps</a></div>'
+     +'<div class="tiny mute">Tap the Place box to search. You can also paste a Google Maps link there.</div>'
      +'<label class="f">Planned budget (total), optional<input id="pbud" type="number" inputmode="numeric" min="0" max="1000000" value="'+(+p.budget||'')+'"></label>'
      +'<label class="f">Dress idea, optional<input id="pdress" maxlength="40" value="'+esc(p.dress||'')+'"></label>'
      +'<div class="small mute">To change the date or time, use Reschedule.</div><div id="serr"></div>'
@@ -3619,13 +3619,94 @@ if(LITE){
     put('parties',p.id,np);closeSheet();toast('Party updated');
   };
 
+
+  /* ---------- LITE fix 4: the Place box is a place search (free OpenStreetMap data through Photon) ---------- */
+  var PS={t:null,seq:0,pos:undefined};
+  var psBox=function(inp){
+    var box=document.getElementById('pplsug');
+    if(!box){box=document.createElement('div');box.id='pplsug';box.className='stack';box.style.gap='6px';var lab=inp.closest('label');(lab||inp).insertAdjacentElement('afterend',box);}
+    return box;
+  };
+  var psPlaceHtml=function(r,i){return '<button class="btn sm" style="text-align:left;justify-content:flex-start;flex-direction:column;align-items:flex-start;gap:0" data-act="pplres" data-id="'+i+'"><span>📍 '+esc(r.name)+'</span>'+(r.sub?'<span class="tiny mute">'+esc(r.sub)+'</span>':'')+'</button>';};
+  var psShow=function(box,res,note){box.__res=res;box.__ms=[];box.innerHTML=res.map(psPlaceHtml).join('')+(note?'<div class="tiny mute">'+esc(note)+'</div>':'');};
+  var psGet=function(url,ms){
+    var ctl=(typeof AbortController!=='undefined')?new AbortController():null,tm=setTimeout(function(){try{ctl&&ctl.abort();}catch(e){}},ms||7000);
+    return fetch(url,ctl?{signal:ctl.signal}:{}).then(function(r){clearTimeout(tm);if(!r.ok)throw new Error('http');return r.json();},function(e){clearTimeout(tm);throw e;});
+  };
+  var psSub=function(a){var o=[];a.forEach(function(x){if(x&&o.indexOf(x)<0)o.push(x);});return o.slice(0,3).join(', ');};
+  var psPhoton=function(inp,box,q,seq){
+    var u='https://photon.komoot.io/api/?lang=en&limit=8&q='+encodeURIComponent(q)+(PS.pos?'&lat='+PS.pos.lat+'&lon='+PS.pos.lon:'');
+    psGet(u).then(function(j){
+      if(seq!==PS.seq||inp.value.trim()!==q)return;
+      var seen={},res=[];
+      ((j&&j.features)||[]).forEach(function(f){
+        var pr=f.properties||{},nm=pr.name||'';if(!nm)return;
+        var sub=psSub([pr.street,pr.district||pr.suburb,pr.city||pr.county,pr.state]),k=(nm+'|'+sub).toLowerCase();if(seen[k])return;seen[k]=1;
+        res.push({name:nm,sub:sub});
+      });
+      if(!res.length){box.__res=[];box.innerHTML='<div class="tiny mute">No places found. Try another word, or tap Search on Google Maps.</div>';return;}
+      psShow(box,res,'Tap a place to use it. Check timings and reviews on Google before booking.');
+    },function(){
+      if(seq!==PS.seq)return;box.__res=[];box.innerHTML='<div class="tiny mute">Search is not working right now. Tap Search on Google Maps, copy the place link and paste it here.</div>';
+    });
+  };
+  var psNear=function(inp,box,seq){
+    var qq='[out:json][timeout:8];(node(around:1500,'+PS.pos.lat+','+PS.pos.lon+')[amenity~"^(cafe|restaurant)$"][name];way(around:1500,'+PS.pos.lat+','+PS.pos.lon+')[amenity~"^(cafe|restaurant)$"][name];);out center 12;';
+    psGet('https://overpass-api.de/api/interpreter?data='+encodeURIComponent(qq),9000).then(function(j){
+      if(seq!==PS.seq||inp.value.trim())return;
+      var seen={},res=[];
+      ((j&&j.elements)||[]).forEach(function(e){
+        var t=e.tags||{},nm=t.name||'';if(!nm||seen[nm.toLowerCase()])return;seen[nm.toLowerCase()]=1;
+        res.push({name:nm,sub:psSub([t.amenity,t['addr:suburb']||t['addr:street'],t['addr:city']])});
+      });
+      if(res.length)psShow(box,res.slice(0,8),'Cafes and restaurants near you. Type to search anywhere.');
+    },function(){});
+  };
+  var psIdeas=function(inp,box,msg){
+    var ms=placeMatches('');box.__ms=ms;box.__res=[];
+    box.innerHTML='<div class="tiny mute">'+esc(msg)+'</div>'+ms.map(function(p,i){return '<button class="btn sm" style="text-align:left;justify-content:flex-start" data-act="pplpick" data-id="'+i+'">✨ '+esc(p)+'</button>';}).join('');
+  };
+  placeSug=function(){
+    var inp=document.getElementById('pplace');if(!inp)return;
+    var box=psBox(inp),q=inp.value.trim();
+    if(/https?:\/\//.test(q))return;
+    if(/banquet|function hall|wedding|marriage hall|kalyana/i.test(q)){box.__res=[];box.__ms=[];box.innerHTML='<div class="notice warn tiny">Sakhi does not suggest banquet halls or wedding venues. Try a home, cafe, garden or clubhouse.</div>';return;}
+    clearTimeout(PS.t);var seq=++PS.seq;
+    if(q.length<3){
+      psIdeas(inp,box,'Searching places near you… or type a name or area to search.');
+      if(PS.pos===undefined&&navigator.geolocation){
+        PS.pos=null;
+        try{navigator.geolocation.getCurrentPosition(function(p){PS.pos={lat:p.coords.latitude,lon:p.coords.longitude};if(document.activeElement===inp&&!inp.value.trim())placeSug();},function(){PS.pos=false;if(document.activeElement===inp&&!inp.value.trim())placeSug();},{timeout:7000,maximumAge:600000});}catch(e){PS.pos=false;}
+      }else if(PS.pos){psNear(inp,box,seq);}
+      else if(PS.pos===false)psIdeas(inp,box,'Type a place name or area to search, for example cafe in Kondapur.');
+      return;
+    }
+    box.__res=[];box.__ms=[];box.innerHTML='<div class="tiny mute">Searching places…</div>';
+    PS.t=setTimeout(function(){psPhoton(inp,box,q,seq);},400);
+  };
+  ACT.pplres=function(t,i){
+    var box=document.getElementById('pplsug'),inp=document.getElementById('pplace');if(!box||!inp)return;
+    var r=(box.__res||[])[+i];if(!r)return;
+    inp.value=r.name.slice(0,60);
+    if(S.sheet){S.sheet.maps='https://www.google.com/maps/search/?api=1&query='+encodeURIComponent(r.name+(r.sub?' '+r.sub:''));S.sheet.keep=false;}
+    var n=document.getElementById('pmapsnote');if(n)n.textContent='✓ Place saved with a Google Maps link. Everyone can tap and open it.';
+    box.innerHTML='';box.__res=[];box.__ms=[];pgsRefresh();
+  };
+  /* the new-party form is shared code: tidy it for Lite (no Paste button, search wording) */
+  var psTidy=function(){
+    var pb=document.querySelector('[data-act=pgpaste]');if(pb)pb.remove();
+    var pi=document.getElementById('pplace');if(pi&&pi.getAttribute('placeholder')!=='Search a place, or paste a Google Maps link')pi.setAttribute('placeholder','Search a place, or paste a Google Maps link');
+    var g=document.getElementById('pgs');if(g&&g.textContent.indexOf('Maps')<0)g.textContent='🔍 Search on Google Maps';
+  };
+  try{new MutationObserver(psTidy).observe(document.body,{childList:true,subtree:true});}catch(e){}
+
   /* ---------- LITE fix 3: Sakhi works on the website without Claude (simple helper, no AI) ---------- */
   var skSendBase=ACT.sksendtext;
   var skPlacesIdeas=[['Cafe with private seating','Quiet corner, easy to talk'],['Garden or terrace cafe','Open air, good for daytime'],['Restaurant with a family room','Space for the whole group'],['Rooftop cafe','Nice view, check the weather'],['Community hall or clubhouse','Cheaper, bring your own snacks']];
   var skNum=function(t){var m=String(t).match(/\d[\d,]*(\.\d+)?/g)||[];return m.map(function(x){return +x.replace(/,/g,'');});};
   var skShowPlaces=function(area,budget){
     SK.msgs.push({r:'c',k:'places',d:{area:area,options:skPlacesIdeas.map(function(o){return {name:o[0],why:o[1]};})}});
-    skAdd('a','Tap Check on Google Maps for any idea, pick a real place you like, then tap Share and Copy. In the party form, tap Paste place.'+(budget?' Your planned total is about ₹'+budget+'.':''));
+    skAdd('a','Tap Check on Google Maps for any idea, pick a real place you like, then tap Share and Copy. In the party form, paste that link into the Place box.'+(budget?' Your planned total is about ₹'+budget+'.':''));
   };
   var skOffline=function(text){
     text=String(text||'').slice(0,500);if(!text)return;

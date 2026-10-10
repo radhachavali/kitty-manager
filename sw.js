@@ -1,5 +1,5 @@
 /* Kitty Manager service worker: keeps the app opening with no internet. Sign-in and sharing still need internet. */
-var VERSION='km-6',SHELL=['./','index.html','shim.js','manifest.webmanifest','firebase-config.js','icon-192.png','icon-512.png'];
+var VERSION='km-7',SHELL=['./','index.html','shim.js','manifest.webmanifest','firebase-config.js','icon-192.png','icon-512.png'];
 self.addEventListener('install',function(e){e.waitUntil(caches.open(VERSION).then(function(c){return c.addAll(SHELL);}).then(function(){return self.skipWaiting();}));});
 self.addEventListener('activate',function(e){e.waitUntil(caches.keys().then(function(ks){return Promise.all(ks.filter(function(k){return k!==VERSION;}).map(function(k){return caches.delete(k);}));}).then(function(){return self.clients.claim();}));});
 self.addEventListener('fetch',function(e){
