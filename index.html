@@ -2169,8 +2169,8 @@ function skCardHtml(m,i){
     h='<b>'+esc(d.name||'Party')+'</b><div class="small">'+esc(d.date||'')+(d.place?' · '+esc(d.place):'')+(d.budget?' · ₹'+esc(d.budget)+' total':'')+'</div>'
      +(m.done?'<div class="pill s-ok">'+skt('done')+'</div>':'<button class="go" data-act="skparty" data-id="'+i+'">'+esc(skt('opendraft'))+'</button>');
   }else if(m.k==='places'){
-    h=(d.options||[]).map(function(o){var q=encodeURIComponent((o.name||'')+' '+(d.area||''));
-      return '<div class="skplace"><b>'+esc(o.name)+'</b> <span class="mute small">'+esc(o.type||'')+(o.cost?' · ~'+esc(o.cost)+' / head':'')+'</span><div class="small">'+esc(o.why||'')+'</div><a class="linkbtn" target="_blank" rel="noopener" href="https://www.google.com/maps/search/?api=1&query='+q+'">'+esc(skt('maps'))+'</a></div>';}).join('')
+    h=(d.options||[]).map(function(o,oi){var q=encodeURIComponent((o.name||'')+' '+(d.area||''));
+      return '<div class="skplace"><b>'+esc(o.name)+'</b> <span class="mute small">'+esc(o.type||'')+(o.cost?' · ~'+esc(o.cost)+' / head':'')+'</span><div class="small">'+esc(o.why||'')+'</div><a class="linkbtn" target="_blank" rel="noopener" href="https://www.google.com/maps/search/?api=1&query='+q+'">'+esc(skt('maps'))+'</a>'+(SK_USE?SK_USE(i,oi):'')+'</div>';}).join('')
      +'<div class="tiny mute">'+esc(skt('pnote'))+'</div>';
   }else if(m.k==='dress'){
     h='<b>👗 '+esc(d.theme)+'</b>'+(d.colours?'<div class="small">'+esc(d.colours)+'</div>':'')+(d.tip?'<div class="small mute">'+esc(d.tip)+'</div>':'')
@@ -2198,6 +2198,7 @@ function skList(){
   try{el.scrollTop=el.scrollHeight;}catch(e){}
   var b=document.getElementById('sksend');if(b)b.disabled=SK.busy;
 }
+var SK_USE=null;
 function skAdd(r,t){SK.msgs.push({r:r,t:t});skList();}
 
 ACT.skopen=function(){
@@ -3572,19 +3573,81 @@ if(LITE){
     }
     return {name:name.slice(0,60),url:url};
   };
-  pgsApply=function(t){
-    var p=parsePlace(t),i=document.getElementById('pplace');if(!p||!i)return false;
-    if(S.sheet){S.sheet.maps=p.url;S.sheet.keep=!p.name;}
-    var n=document.getElementById('pmapsnote');
-    if(p.name){i.value=p.name;if(n)n.textContent='✓ Place and Google Maps link saved. Everyone can tap and open it.';}
-    else{i.value='';if(n)n.textContent='✓ Google Maps link saved. Now type the place name above, for example the cafe name.';try{i.focus();}catch(e){}}
-    var b=document.getElementById('pplsug');if(b)b.innerHTML='';pgsRefresh();return true;
+  /* ---------- LITE fix 1b: Place = plain text box + Place link box + Search on Google / Ask Sakhi ---------- */
+  placeSug=function(){};  /* no suggestion list: the Place box is a plain text box */
+  var urlOf=function(t){var m=/https?:\/\/\S+/.exec(String(t||''));return m?m[0].replace(/[)\].,;]+$/,''):'';};
+  var plNote=function(t){var n=document.getElementById('pmapsnote');if(n)n.textContent=t||'';};
+  var plBlock=function(place,link,note){
+    return '<label class="f">Place, optional<input id="pplace" maxlength="600" value="'+esc(place||'')+'" placeholder="Type the place name, or anything" autocomplete="off"></label>'
+     +'<label class="f">Place link from Google Maps, optional<textarea id="pmaplink" rows="2" placeholder="Paste the Google Maps link here" autocomplete="off">'+esc(link||'')+'</textarea></label>'
+     +'<div id="pmapsnote" class="tiny mute">'+esc(note||'')+'</div>'
+     +'<div class="row" style="flex-wrap:nowrap"><a id="pgs" class="btn sm" style="flex:1;text-decoration:none;display:flex;justify-content:center;align-items:center" target="_blank" rel="noopener" href="#" data-act="pgs">🔍 Search on Google Maps</a><button class="btn sm" style="flex:1" data-act="pask">✨ Ask Sakhi</button></div>'
+     +'<div class="tiny mute">On Google Maps tap Share, then Copy, and paste the link above. The place name fills in by itself. Or ask Sakhi, then tap Use this place.</div>';
   };
-  /* the Place box must accept a long Maps share text, then keep only the short name */
-  document.addEventListener('focusin',function(e){if(e.target&&e.target.id==='pplace')e.target.setAttribute('maxlength','600');},true);
-  document.addEventListener('input',function(e){var el=e.target;if(el&&el.id==='pplace'&&!/https?:\/\//.test(el.value)&&el.value.length>60)el.value=el.value.slice(0,60);},true);
-  /* typing the name after pasting a link must not drop the link */
-  document.addEventListener('input',function(e){var el=e.target;if(el&&el.id==='pplace'&&S.sheet&&S.sheet.keep&&S.sheet.maps&&el.value&&!/https?:\/\//.test(el.value))e.stopImmediatePropagation();},true);
+  /* a link pasted (or a Maps share text) fills the link box and, when it can, the Place box */
+  var plApply=function(raw,fromPlace){
+    var lk=document.getElementById('pmaplink'),pl=document.getElementById('pplace');if(!lk||!pl||!S.sheet)return false;
+    var u=urlOf(raw);
+    if(!u){
+      if(fromPlace)return false;
+      S.sheet.maps='';plNote(String(raw||'').trim()?'This does not look like a link. In Google Maps tap Share, then Copy, and paste it here.':'');return false;
+    }
+    var p=parsePlace(raw),cur=pl.value.trim();
+    S.sheet.maps=u;if(lk.value!==u)lk.value=u;
+    if(p&&p.name){
+      if(fromPlace||!cur||cur===S.sheet.auto){pl.value=p.name;S.sheet.auto=p.name;plNote('✓ Link saved and place name filled in. You can change the name.');}
+      else plNote('✓ Link saved. The place name you typed is kept.');
+    }else{
+      if(fromPlace)pl.value='';
+      plNote(pl.value.trim()?'✓ Link saved.':'✓ Link saved. Now type the place name above.');
+      if(fromPlace){try{pl.focus();}catch(e){}}
+    }
+    pgsRefresh();return true;
+  };
+  pgsApply=function(t){return plApply(t,true);};   /* a link pasted straight into the Place box is moved to the link box */
+  document.addEventListener('input',function(e){
+    var el=e.target;if(!el)return;
+    if(el.id==='pplace'&&!/https?:\/\//.test(el.value)){
+      if(el.value.length>60)el.value=el.value.slice(0,60);
+      e.stopImmediatePropagation();pgsRefresh();   /* typing a name must never drop the saved link */
+    }else if(el.id==='pmaplink'){plApply(el.value,false);}
+  },true);
+  var plCheck=function(){
+    var lk=document.getElementById('pmaplink');if(!lk||!S.sheet)return '';
+    var raw=lk.value.trim(),u=urlOf(raw);
+    if(raw&&!u)return 'The place link does not look right. Paste a Google Maps link, or clear that box.';
+    S.sheet.maps=u;
+    if(u&&!val('pplace').trim())return 'Type the place name too.';
+    return '';
+  };
+  /* the new-party form is shared code: swap its Place part for the new one */
+  var sheet0=sheet;
+  sheet=function(html){
+    if(typeof html==='string'&&html.indexOf('<h2>Organize party</h2>')>-1){
+      var a=html.indexOf('<label class="f">Place, optional'),b=html.indexOf('<label class="f">Planned budget');
+      if(a>-1&&b>a)html=html.slice(0,a)+plBlock('','','')+html.slice(b);
+    }
+    return sheet0(html);
+  };
+  var psaveBase=ACT.psave;
+  ACT.psave=function(){
+    if(S.sheet&&S.sheet.t==='party'){var m=plCheck();if(m)return serr(m);}
+    return psaveBase.apply(this,arguments);
+  };
+  ACT.pask=function(){
+    var b=val('pbud').trim(),pl=val('pplace').trim(),dt=val('pdt');
+    SK.pre='Suggest places for our kitty party'+(dt?' on '+dt:'')+(pl?' (my idea: '+pl+')':'')+(b?'. The planned total budget is about '+b:'')+'. Ask me the area and how many women are coming if you need them.';
+    ACT.skopen();
+  };
+  /* Sakhi place cards get a "Use this place" button while a party form is open */
+  SK_USE=function(i,oi){return document.getElementById('pplace')?'<button class="btn sm" data-act="skuseplace" data-id="'+i+'" data-w="'+oi+'">✔ Use this place</button>':'';};
+  ACT.skuseplace=function(t){
+    var i=+t.getAttribute('data-id'),oi=+t.getAttribute('data-w'),m=SK.msgs[i],o=m&&m.d&&(m.d.options||[])[oi];
+    var pl=document.getElementById('pplace'),lk=document.getElementById('pmaplink');if(!o||!pl||!lk||!S.sheet)return;
+    var nm=String(o.name||'').slice(0,60),u='https://www.google.com/maps/search/?api=1&query='+encodeURIComponent((nm+' '+(m.d.area||'')).trim());
+    pl.value=nm;S.sheet.auto=nm;lk.value=u;S.sheet.maps=u;
+    plNote('✓ Place and Google Maps link added from Sakhi. You can change them.');pgsRefresh();ACT.skclose();toast('Place added to the party form');
+  };
 
   /* ---------- LITE fix 2: edit a party and add the place after it is created ---------- */
   var canEditParty=function(p){return !S.ro&&!!p&&!p.archived&&(canDelParty(p)||S.mode==='local'||!!S.owner);};
@@ -3598,12 +3661,9 @@ if(LITE){
   };
   ACT.pedit=function(){
     var p=P();if(!p||!canEditParty(p))return;
-    S.sheet={t:'pedit',pid:p.id,maps:p.maps||''};
+    S.sheet={t:'pedit',pid:p.id,maps:p.maps||'',auto:p.maps?(p.place||''):''};
     sheet('<div class="stack"><h2>Edit party</h2><label class="f">Party name<input id="pname" maxlength="40" value="'+esc(p.name||'')+'"></label>'
-     +'<label class="f">Place<input id="pplace" maxlength="600" value="'+esc(p.place||'')+'" placeholder="Search a place, or paste a Google Maps link" autocomplete="off"></label>'
-     +'<div id="pmapsnote" class="tiny mute">'+(p.maps?'✓ Google Maps link saved. Everyone can tap and open it.':'')+'</div>'
-     +'<div class="row" style="flex-wrap:nowrap"><a id="pgs" class="btn sm" style="flex:1;text-decoration:none;display:flex;justify-content:center;align-items:center" target="_blank" rel="noopener" href="#" data-act="pgs">\uD83D\uDD0D Search on Google Maps</a></div>'
-     +'<div class="tiny mute">Tap the Place box to search. You can also paste a Google Maps link there.</div>'
+     +plBlock(p.place||'',p.maps||'',p.maps?'\u2713 Google Maps link saved.':'')
      +'<label class="f">Planned budget (total), optional<input id="pbud" type="number" inputmode="numeric" min="0" max="1000000" value="'+(+p.budget||'')+'"></label>'
      +'<label class="f">Dress idea, optional<input id="pdress" maxlength="40" value="'+esc(p.dress||'')+'"></label>'
      +'<div class="small mute">To change the date or time, use Reschedule.</div><div id="serr"></div>'
@@ -3613,6 +3673,7 @@ if(LITE){
   ACT.pedit2=function(){
     var p=P();if(!p||!canEditParty(p)||!S.sheet||S.sheet.t!=='pedit')return;
     var name=val('pname').trim();if(!name)return serr('Give the party a name.');
+    var m=plCheck();if(m)return serr(m);
     var place=val('pplace').trim(),maps=place?(S.sheet.maps||''):'';
     var np=Object.assign({},p,{name:name,place:place,maps:maps,budget:Math.max(0,Math.min(1000000,Math.round(+val('pbud'))||0)),dress:val('pdress').trim()});delete np.id;
     if(!np.dress)delete np.dress;
@@ -3620,93 +3681,13 @@ if(LITE){
   };
 
 
-  /* ---------- LITE fix 4: the Place box is a place search (free OpenStreetMap data through Photon) ---------- */
-  var PS={t:null,seq:0,pos:undefined};
-  var psBox=function(inp){
-    var box=document.getElementById('pplsug');
-    if(!box){box=document.createElement('div');box.id='pplsug';box.className='stack';box.style.gap='6px';var lab=inp.closest('label');(lab||inp).insertAdjacentElement('afterend',box);}
-    return box;
-  };
-  var psPlaceHtml=function(r,i){return '<button class="btn sm" style="text-align:left;justify-content:flex-start;flex-direction:column;align-items:flex-start;gap:0" data-act="pplres" data-id="'+i+'"><span>📍 '+esc(r.name)+'</span>'+(r.sub?'<span class="tiny mute">'+esc(r.sub)+'</span>':'')+'</button>';};
-  var psShow=function(box,res,note){box.__res=res;box.__ms=[];box.innerHTML=res.map(psPlaceHtml).join('')+(note?'<div class="tiny mute">'+esc(note)+'</div>':'');};
-  var psGet=function(url,ms){
-    var ctl=(typeof AbortController!=='undefined')?new AbortController():null,tm=setTimeout(function(){try{ctl&&ctl.abort();}catch(e){}},ms||7000);
-    return fetch(url,ctl?{signal:ctl.signal}:{}).then(function(r){clearTimeout(tm);if(!r.ok)throw new Error('http');return r.json();},function(e){clearTimeout(tm);throw e;});
-  };
-  var psSub=function(a){var o=[];a.forEach(function(x){if(x&&o.indexOf(x)<0)o.push(x);});return o.slice(0,3).join(', ');};
-  var psPhoton=function(inp,box,q,seq){
-    var u='https://photon.komoot.io/api/?lang=en&limit=8&q='+encodeURIComponent(q)+(PS.pos?'&lat='+PS.pos.lat+'&lon='+PS.pos.lon:'');
-    psGet(u).then(function(j){
-      if(seq!==PS.seq||inp.value.trim()!==q)return;
-      var seen={},res=[];
-      ((j&&j.features)||[]).forEach(function(f){
-        var pr=f.properties||{},nm=pr.name||'';if(!nm)return;
-        var sub=psSub([pr.street,pr.district||pr.suburb,pr.city||pr.county,pr.state]),k=(nm+'|'+sub).toLowerCase();if(seen[k])return;seen[k]=1;
-        res.push({name:nm,sub:sub});
-      });
-      if(!res.length){box.__res=[];box.innerHTML='<div class="tiny mute">No places found. Try another word, or tap Search on Google Maps.</div>';return;}
-      psShow(box,res,'Tap a place to use it. Check timings and reviews on Google before booking.');
-    },function(){
-      if(seq!==PS.seq)return;box.__res=[];box.innerHTML='<div class="tiny mute">Search is not working right now. Tap Search on Google Maps, copy the place link and paste it here.</div>';
-    });
-  };
-  var psNear=function(inp,box,seq){
-    var qq='[out:json][timeout:8];(node(around:1500,'+PS.pos.lat+','+PS.pos.lon+')[amenity~"^(cafe|restaurant)$"][name];way(around:1500,'+PS.pos.lat+','+PS.pos.lon+')[amenity~"^(cafe|restaurant)$"][name];);out center 12;';
-    psGet('https://overpass-api.de/api/interpreter?data='+encodeURIComponent(qq),9000).then(function(j){
-      if(seq!==PS.seq||inp.value.trim())return;
-      var seen={},res=[];
-      ((j&&j.elements)||[]).forEach(function(e){
-        var t=e.tags||{},nm=t.name||'';if(!nm||seen[nm.toLowerCase()])return;seen[nm.toLowerCase()]=1;
-        res.push({name:nm,sub:psSub([t.amenity,t['addr:suburb']||t['addr:street'],t['addr:city']])});
-      });
-      if(res.length)psShow(box,res.slice(0,8),'Cafes and restaurants near you. Type to search anywhere.');
-    },function(){});
-  };
-  var psIdeas=function(inp,box,msg){
-    var ms=placeMatches('');box.__ms=ms;box.__res=[];
-    box.innerHTML='<div class="tiny mute">'+esc(msg)+'</div>'+ms.map(function(p,i){return '<button class="btn sm" style="text-align:left;justify-content:flex-start" data-act="pplpick" data-id="'+i+'">✨ '+esc(p)+'</button>';}).join('');
-  };
-  placeSug=function(){
-    var inp=document.getElementById('pplace');if(!inp)return;
-    var box=psBox(inp),q=inp.value.trim();
-    if(/https?:\/\//.test(q))return;
-    if(/banquet|function hall|wedding|marriage hall|kalyana/i.test(q)){box.__res=[];box.__ms=[];box.innerHTML='<div class="notice warn tiny">Sakhi does not suggest banquet halls or wedding venues. Try a home, cafe, garden or clubhouse.</div>';return;}
-    clearTimeout(PS.t);var seq=++PS.seq;
-    if(q.length<3){
-      psIdeas(inp,box,'Searching places near you… or type a name or area to search.');
-      if(PS.pos===undefined&&navigator.geolocation){
-        PS.pos=null;
-        try{navigator.geolocation.getCurrentPosition(function(p){PS.pos={lat:p.coords.latitude,lon:p.coords.longitude};if(document.activeElement===inp&&!inp.value.trim())placeSug();},function(){PS.pos=false;if(document.activeElement===inp&&!inp.value.trim())placeSug();},{timeout:7000,maximumAge:600000});}catch(e){PS.pos=false;}
-      }else if(PS.pos){psNear(inp,box,seq);}
-      else if(PS.pos===false)psIdeas(inp,box,'Type a place name or area to search, for example cafe in Kondapur.');
-      return;
-    }
-    box.__res=[];box.__ms=[];box.innerHTML='<div class="tiny mute">Searching places…</div>';
-    PS.t=setTimeout(function(){psPhoton(inp,box,q,seq);},400);
-  };
-  ACT.pplres=function(t,i){
-    var box=document.getElementById('pplsug'),inp=document.getElementById('pplace');if(!box||!inp)return;
-    var r=(box.__res||[])[+i];if(!r)return;
-    inp.value=r.name.slice(0,60);
-    if(S.sheet){S.sheet.maps='https://www.google.com/maps/search/?api=1&query='+encodeURIComponent(r.name+(r.sub?' '+r.sub:''));S.sheet.keep=false;}
-    var n=document.getElementById('pmapsnote');if(n)n.textContent='✓ Place saved with a Google Maps link. Everyone can tap and open it.';
-    box.innerHTML='';box.__res=[];box.__ms=[];pgsRefresh();
-  };
-  /* the new-party form is shared code: tidy it for Lite (no Paste button, search wording) */
-  var psTidy=function(){
-    var pb=document.querySelector('[data-act=pgpaste]');if(pb)pb.remove();
-    var pi=document.getElementById('pplace');if(pi&&pi.getAttribute('placeholder')!=='Search a place, or paste a Google Maps link')pi.setAttribute('placeholder','Search a place, or paste a Google Maps link');
-    var g=document.getElementById('pgs');if(g&&g.textContent.indexOf('Maps')<0)g.textContent='🔍 Search on Google Maps';
-  };
-  try{new MutationObserver(psTidy).observe(document.body,{childList:true,subtree:true});}catch(e){}
-
   /* ---------- LITE fix 3: Sakhi works on the website without Claude (simple helper, no AI) ---------- */
   var skSendBase=ACT.sksendtext;
   var skPlacesIdeas=[['Cafe with private seating','Quiet corner, easy to talk'],['Garden or terrace cafe','Open air, good for daytime'],['Restaurant with a family room','Space for the whole group'],['Rooftop cafe','Nice view, check the weather'],['Community hall or clubhouse','Cheaper, bring your own snacks']];
   var skNum=function(t){var m=String(t).match(/\d[\d,]*(\.\d+)?/g)||[];return m.map(function(x){return +x.replace(/,/g,'');});};
   var skShowPlaces=function(area,budget){
     SK.msgs.push({r:'c',k:'places',d:{area:area,options:skPlacesIdeas.map(function(o){return {name:o[0],why:o[1]};})}});
-    skAdd('a','Tap Check on Google Maps for any idea, pick a real place you like, then tap Share and Copy. In the party form, paste that link into the Place box.'+(budget?' Your planned total is about ₹'+budget+'.':''));
+    skAdd('a','Tap Use this place to put an idea in your party form, or tap Check on Google Maps to look at it first.'+(budget?' Your planned total is about ₹'+budget+'.':''));
   };
   var skOffline=function(text){
     text=String(text||'').slice(0,500);if(!text)return;
