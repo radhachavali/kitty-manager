@@ -1,0 +1,29 @@
+{
+ "name": "Kitty Manager",
+ "short_name": "Kitty Manager",
+ "description": "Run a chit or kitty fairly: lottery draw, due dates, treasurer records and party bills.",
+ "start_url": "./index.html",
+ "scope": "./",
+ "display": "standalone",
+ "orientation": "portrait",
+ "background_color": "#fbf6f1",
+ "theme_color": "#7a2e6e",
+ "icons": [
+  {
+   "src": "icon-192.png",
+   "sizes": "192x192",
+   "type": "image/png"
+  },
+  {
+   "src": "icon-512.png",
+   "sizes": "512x512",
+   "type": "image/png"
+  },
+  {
+   "src": "icon-maskable-512.png",
+   "sizes": "512x512",
+   "type": "image/png",
+   "purpose": "maskable"
+  }
+ ]
+}
