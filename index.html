@@ -133,6 +133,39 @@ label.f{display:flex;flex-direction:column;gap:6px;font-size:16px;font-weight:80
 .chsk{background:var(--gold-soft)!important;color:var(--fg)!important}.chwho{font-weight:800;color:var(--accent)}.chtime{opacity:.65;text-align:right;font-size:12px}.chatgo{margin:2px 0}
 .gc{border:2px solid var(--g)!important;border-left-width:8px!important;text-align:left}
 .wincard{border:2px solid var(--gold)!important}
+/* desktop layout: only 1100px and wider */
+@media (min-width:1100px){
+html body{max-width:none;padding:20px 32px 60px}
+/* chit page: sidebar + work area */
+#root>.stack:has(>.tabs){display:grid;grid-template-columns:320px minmax(0,1fr);column-gap:32px;row-gap:14px;align-items:start;grid-template-rows:auto auto auto 1fr}
+#root>.stack:has(>.tabs)>:first-child{grid-column:2;grid-row:1;justify-self:end}
+#root>.stack:has(>.tabs)>:nth-child(2){grid-column:1;grid-row:1}
+#root>.stack:has(>.tabs)>.tabs{grid-column:1;grid-row:2;flex-direction:column;overflow:visible;position:sticky;top:16px;gap:6px}
+#root>.stack:has(>.tabs)>.tabs>.tab{width:100%;justify-content:flex-start;text-align:left;border-radius:14px}
+#root>.stack:has(>.tabs)>#thought{grid-column:1;grid-row:3}
+#root>.stack:has(>.tabs)>.tabs+*{grid-column:2;grid-row:2/5;display:grid;grid-template-columns:repeat(auto-fit,minmax(380px,1fr));gap:16px;align-items:start}
+#root>.stack:has(>.tabs)>.tabs+*>:is(.sakhi,.row.between,.card.hero,.small.mute,.board,.notice,.draw,.row,.btn,h2,h3){grid-column:1/-1}
+#root>.stack:has(>.tabs)>.tabs+*:not(:has(>.card~.card))>.card,#root>.stack:has(>.tabs)>.tabs+*>button.go{grid-column:1/-1}
+/* board: table + legend side by side */
+#root>.stack:has(>.tabs)>.tabs+*:has(>.board){grid-template-columns:minmax(0,1fr) 260px}
+#root>.stack:has(>.tabs)>.tabs+*:has(>.board)>.row.small{grid-column:2;grid-row:2;flex-direction:column;align-items:flex-start}
+#root>.stack:has(>.tabs)>.tabs+*:has(>.board)>.board{grid-column:1;grid-row:2}
+/* smooth on desktop: stop endless animations */
+.skhome,.skhome b:first-child{animation:none!important}
+/* home */
+#root>.stack:has(>.htabs){display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;align-items:start}
+#root>.stack:has(>.htabs)>:is(.brand,.htabs,.skhome,.small.mute,.card.stack:not(.tcard)){grid-column:1/-1}
+#root>.stack:has(>.htabs)>.row.between:first-child{position:absolute;top:22px;right:32px}
+#root>.stack:has(>.htabs)>.btngrid{grid-column:1/-1;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+#root>.stack:has(>.htabs)>.btngrid>.btn{grid-column:auto;margin:0}
+#root .skhome .skchips{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
+#root .skhome .skchips>*{width:auto}
+#root>.stack:not(:has(>.tabs)):not(:has(>.htabs)){max-width:980px;margin-inline:auto;width:100%}
+html .sheetbox,html .skbox{max-width:640px;border-radius:22px;margin-bottom:4vh}
+.sheetbg{align-items:center}
+}
+@media (min-width:1500px){#root>.stack:has(>.htabs){grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media (min-width:1900px){#root>.stack:has(>.htabs){grid-template-columns:repeat(4,minmax(0,1fr))}#root>.stack:has(>.tabs){grid-template-columns:320px minmax(0,1fr)}}
 </style>
 <div id="root"></div><div id="sheet"></div><div id="toast"></div><script>(function(){var LITE=true;/* ===== Kitty Manager: core engine ===== */
 var $=function(s,r){return (r||document).querySelector(s);};
