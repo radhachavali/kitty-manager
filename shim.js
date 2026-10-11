@@ -2,15 +2,15 @@
    Lets the same app that runs inside Claude run as a normal website on Firebase.
    It supplies window.claude (user, db, downloads) before the app starts.
    - Sign-in: Google (admin and anyone), and optionally phone number + SMS code (members only; set phone:true in firebase-config.js).
-   - The admin (treasurer) is the account named in firebase-config.js (owner).
-   - Everyone else sees only the chits whose join code they typed (access/{uid}).
+   - Every signed-in person can run chits: whoever creates a chit is its treasurer (the chit carries _o = her id).
+   - A person also sees the chits whose join code she typed (access/{uid}). The account named in firebase-config.js is the app owner (admin): it claims old chits that have no _o.
    Every saved document carries a field _g (its group: a chit id, or "_u_<uid>" for the person's own notes). */
 (function(){
   var CFG=window.KM_CONFIG||{},FB=CFG.firebase||{};
   var OWNER=String(CFG.owner||'').toLowerCase();
-  var gate=null,me=null,isOwner=false,fs=null,auth=null,readyRes,ready=new Promise(function(r){readyRes=r;});
-  var K={chits:{},parties:{}};            // groups this page knows about
-  var accessG=[],accessWait=[],accessLoaded=false,accessUnsub=null,lastLoadErr='';
+  var gate=null,me=null,isAdmin=false,fs=null,auth=null,readyRes,ready=new Promise(function(r){readyRes=r;});
+  var K={chits:{},parties:{},own:{}};            // groups this page knows about
+  var myReq=null,canMake=false,unlockedDoc=false,reqs=[],reqUnsub=null,accessG=[],accessWait=[],accessLoaded=false,accessUnsub=null,lastLoadErr='';
 
   function el(h){var d=document.createElement('div');d.innerHTML=h;return d.firstChild;}
   var BTN='width:100%;min-height:58px;border-radius:16px;border:0;font:800 20px system-ui;cursor:pointer;';
@@ -113,7 +113,7 @@
   function groupOf(col,id,data){
     data=data||{};
     if(col==='chits')return id;
-    if(col==='parties')return data.cid||id;
+    if(col==='parties')return data.cid||K.parties[id]||('_u_'+me.uid);
     var c=[data.cid,data.gid,data.pid],p=String(id).split('_');
     c.push(p[0]);if(col==='skdata'&&p.length>1)c.push(p[1]);
     for(var i=0;i<c.length;i++){if(known(c[i]))return top(c[i]);}
@@ -121,10 +121,10 @@
   }
   function noteDocs(col,docs){
     if(col==='chits')docs.forEach(function(d){K.chits[d.id]=1;});
-    if(col==='parties')docs.forEach(function(d){var v=d.data();K.parties[d.id]=(v&&v.cid)||null;});
+    if(col==='parties')docs.forEach(function(d){var v=d.data();K.parties[d.id]=(v&&(v._g||v.cid))||d.id;});
   }
   function strip(o){var r={};Object.keys(o||{}).forEach(function(k){if(k!=='_g')r[k]=o[k];});return r;}
-  function wrap(d){return {id:d.id,data:function(){return strip(d.data());}};}
+  function wrap(d,col){return {id:d.id,data:function(){var o=strip(d.data());if(col==='chits'&&isAdmin&&o._o===undefined)o._o=me.uid;return o;}};}
   var lastChits={};
 
   /* ---- codes index: the admin publishes each join code so a member can find her chit ---- */
@@ -136,7 +136,6 @@
     return go();
   }
   function showCodeWarn(err){
-    if(!isOwner)return;
     if(!err){if(codeBan){codeBan.remove();codeBan=null;}return;}
     if(!codeBan){
       codeBan=el('<div id="kmcodewarn" style="position:fixed;left:10px;right:10px;top:10px;z-index:60;background:#fde8e8;color:#8a1c1c;border:2px solid #d94b4b;border-radius:14px;padding:10px 12px;font:700 14px/1.4 system-ui"><div id="kmcwt"></div><button id="kmcwb" style="margin-top:8px;border:0;border-radius:10px;background:#8a1c1c;color:#fff;padding:8px 14px;font:700 14px system-ui">Try again</button></div>');
@@ -150,13 +149,13 @@
     var list=Object.keys(inv||{}).map(function(m){return [inv[m],m];});
     return Promise.all(list.map(function(p){return setCode(p[0],id,p[1]).then(function(){return null;},function(e){return {code:p[0],err:(e&&e.code)||String(e)};});})).then(function(r){return r.filter(Boolean);});
   }
-  function syncCodes(id,data){
-    var old=lastChits[id]&&lastChits[id].inv||{},nu=(data&&data.inv)||{},seen={};
+  function syncCodes(id,data,oldInv){
+    var old=oldInv||(lastChits[id]&&lastChits[id].inv)||{},nu=(data&&data.inv)||{},seen={},dels=[];
     Object.keys(nu).forEach(function(mid){seen[nu[mid]]=1;});
-    Object.keys(old).forEach(function(mid){var code=old[mid];if(!seen[code])fs.collection('codes').doc(code).delete().catch(function(){});});
-    if(!data)return;
+    Object.keys(old).forEach(function(mid){var code=old[mid];if(!seen[code])dels.push(fs.collection('codes').doc(code).delete().catch(function(){}));});
+    if(!data)return Promise.all(dels);
     pubKey[id]=JSON.stringify(nu);
-    publishCodes(id,nu).then(function(bad){showCodeWarn(bad.length?bad[0].err:'');});
+    return Promise.all(dels).then(function(){return publishCodes(id,nu);}).then(function(bad){showCodeWarn(bad.length?bad[0].err:'');});
   }
   /* each time the admin opens the website, make sure every chit's codes are on the website (old chits too) */
   function ensureCodes(id,data,force){
@@ -180,46 +179,94 @@
         var ref=fs.collection(col).doc(id);
         return {
           set:function(data){
-            if(col==='chits'){K.chits[id]=1;if(isOwner)syncCodes(id,data);lastChits[id]=data;}
-            if(col==='parties')K.parties[id]=data.cid||null;
+            if(col==='chits'&&!canMake&&!K.own[id]&&!(data&&data._o===me.uid)){if(window.__kmShowLock)window.__kmShowLock();return Promise.reject(Object.assign(new Error('locked'),{code:'permission-denied'}));}
+            var oldInv=null;
+            if(col==='chits'){K.chits[id]=1;K.own[id]=1;oldInv=(lastChits[id]&&lastChits[id].inv)||{};lastChits[id]=data;}
             var g=groupOf(col,id,data),d=JSON.parse(JSON.stringify(data));d._g=g;
-            return ref.set(d);
+            if(col==='parties')K.parties[id]=g;
+            if(col==='chits'&&!d._o)d._o=me.uid;
+            return ref.set(d).then(function(){if(col==='chits'){runSyncs();syncCodes(id,data,oldInv);}});
           },
-          delete:function(){if(col==='chits'&&isOwner){syncCodes(id,null);delete lastChits[id];}return ref.delete();},
+          delete:function(){if(col==='chits'){var pr=syncCodes(id,null,(lastChits[id]&&lastChits[id].inv)||{});delete lastChits[id];delete K.own[id];return pr.then(function(){return ref.delete();});}return ref.delete();},
           get:function(){return ref.get().then(function(r){return {exists:r.exists,id:r.id,data:function(){return strip(r.data());}};});}
         };
       },
       onSnapshot:function(cb,errcb){return listen(col,cb,errcb);}
     };
   }
+  function runSyncs(){accessWait.forEach(function(f){f();});}
+  var stamped={};
+  /* the chits this person runs: found from the chits she owns. The admin also claims old chits that have no owner yet. */
+  function noteOwned(docs){
+    var now={},present={},changed=false;
+    docs.forEach(function(d){
+      var v=d.data();present[d.id]=1;
+      if(v._o===undefined&&isAdmin&&!stamped[d.id]){stamped[d.id]=1;fs.collection('chits').doc(d.id).update({_o:me.uid}).catch(function(){delete stamped[d.id];});}
+      if(d.metadata&&d.metadata.hasPendingWrites)return;
+      now[d.id]=1;
+      lastChits[d.id]=v;ensureCodes(d.id,Object.assign({},v,{_o:me.uid}));
+    });
+    Object.keys(now).forEach(function(id){if(!K.own[id]){K.own[id]=1;changed=true;}});
+    Object.keys(K.own).forEach(function(id){if(!present[id]){delete K.own[id];changed=true;}});
+    if(changed)runSyncs();
+  }
+  function wantGroups(){
+    var a=accessG.slice();
+    Object.keys(K.own).forEach(function(c){if(a.indexOf(c)<0)a.push(c);});
+    a.push('_u_'+me.uid);return a;
+  }
   function listen(col,cb,errcb){
-    if(isOwner){
-      return fs.collection(col).onSnapshot(function(s){noteDocs(col,s.docs);if(col==='chits')s.docs.forEach(function(d){lastChits[d.id]=d.data();ensureCodes(d.id,d.data());});cb({docs:s.docs.map(wrap)});},errcb);
-    }
-    /* a member: one listener per group she may read, merged into one list */
+    /* one listener per group this person may read (her own chits, chits she joined, her own notes), merged into one list */
     var subs={},bag={},tries={},dead=false,first=false;
-    function emit(){var all=[];Object.keys(bag).forEach(function(g){all=all.concat(bag[g]);});noteDocs(col,all);cb({docs:all.map(wrap)});}
+    function emit(){
+      var all=[];Object.keys(bag).forEach(function(g){all=all.concat(bag[g]);});
+      var seen={};all=all.filter(function(d){if(seen[d.id])return false;seen[d.id]=1;return true;});
+      noteDocs(col,all);cb({docs:all.map(function(d){return wrap(d,col);})});
+    }
+    function attach(key,q,own){
+      var opt=own?{includeMetadataChanges:true}:{};
+      subs[key]=q.onSnapshot(opt,function(s){
+        var docs=s.docs;
+        if(own){
+          if(isAdmin)docs=docs.filter(function(d){var o=d.data()._o;return o===undefined||o===me.uid;});
+          bag[key]=docs;emit();noteOwned(docs);return;
+        }
+        bag[key]=docs;emit();
+      },function(e){
+        lastLoadErr=col+': '+((e&&e.code)||String(e));
+        try{delete subs[key];}catch(_){}
+        /* a read refused right after a save or a join: try again a few times */
+        if(e&&e.code==='permission-denied'&&!dead){
+          tries[key]=(tries[key]||0)+1;
+          if(tries[key]<=5){setTimeout(function(){if(!dead)sync();},1200*tries[key]);return;}
+        }
+        if(errcb&&!(e&&e.code==='permission-denied'&&key!=='__own'&&key!=='_u_'+me.uid))errcb(e);
+      });
+    }
     function sync(){
       if(dead)return;
-      var want=accessG.concat(['_u_'+me.uid]);
-      want.forEach(function(g){
-        if(subs[g])return;
-        subs[g]=fs.collection(col).where('_g','==',g).onSnapshot(function(s){bag[g]=s.docs;emit();},function(e){
-          lastLoadErr=col+': '+((e&&e.code)||String(e));
-          try{subs[g]=null;delete subs[g];}catch(_){}
-          /* a read refused right after joining: try again a few times */
-          if(e&&e.code==='permission-denied'&&!dead){
-            tries[g]=(tries[g]||0)+1;
-            if(tries[g]<=5){setTimeout(function(){if(!dead)sync();},1200*tries[g]);return;}
-          }
-          if(errcb&&!(e&&e.code==='permission-denied'&&g!=='_u_'+me.uid))errcb(e);
-        });
-      });
+      var want;
+      if(col==='chits'){
+        if(!subs.__own)attach('__own',isAdmin?fs.collection('chits'):fs.collection('chits').where('_o','==',me.uid),true);
+        want=accessG.slice().concat(['__own']);
+        accessG.forEach(function(g){if(!subs[g])attach(g,fs.collection(col).where('_g','==',g),false);});
+      }else{
+        want=wantGroups();
+        want.forEach(function(g){if(!subs[g])attach(g,fs.collection(col).where('_g','==',g),false);});
+      }
       Object.keys(subs).forEach(function(g){if(want.indexOf(g)<0){subs[g]();delete subs[g];delete bag[g];emit();}});
       if(!first){first=true;emit();}
     }
     accessWait.push(sync);if(accessLoaded)sync();
     return function(){dead=true;Object.keys(subs).forEach(function(g){subs[g]();});};
+  }
+  function changed(){try{if(window.__kmUnlockChanged)window.__kmUnlockChanged();}catch(e){}}
+  /* who may run chits: the admin, and the people the admin unlocked (treasurers/{uid}) */
+  function watchUnlock(){
+    canMake=isAdmin;
+    fs.collection('treasurers').doc(me.uid).onSnapshot(function(s){unlockedDoc=!!s.exists;canMake=isAdmin||unlockedDoc;changed();},function(){});
+    fs.collection('requests').doc(me.uid).onSnapshot(function(s){myReq=s.exists?s.data():null;changed();},function(){});
+    if(isAdmin)reqUnsub=fs.collection('requests').onSnapshot(function(s){reqs=s.docs.map(function(d){var v=d.data();return {uid:d.id,name:v.name||'',contact:v.contact||'',at:v.at||'',status:v.status||''};});changed();},function(){});
   }
   function watchAccess(){
     accessUnsub=fs.collection('access').doc(me.uid).onSnapshot({includeMetadataChanges:true},function(s){
@@ -238,7 +285,7 @@
     var cd;try{cd=await fs.collection('codes').doc(code).get();}catch(e){return {ok:false,why:'codes-read',detail:ecode(e)};}
     if(!cd.exists)return {ok:false,why:'notfound'};
     var cid=cd.data().cid;
-    if(isOwner)return {ok:true};
+    if(K.own[cid])return {ok:true};
     var cur=[];
     try{var ad=await fs.collection('access').doc(me.uid).get();cur=(ad.exists&&ad.data().g)||[];}catch(e){return {ok:false,why:'access-read',detail:ecode(e)};}
     if(cur.indexOf(cid)<0){
@@ -251,7 +298,7 @@
     await sleep(350);
     return {ok:true};
   }
-  window.__KMW={redeem:redeem,checkCode:checkCode,republish:function(){return republishAll(true);},owner:function(){return isOwner;},uid:function(){return me&&me.uid;}};
+  window.__KMW={redeem:redeem,checkCode:checkCode,republish:function(){return republishAll(true);},owner:function(){return isAdmin;},unlocked:function(){return canMake;},isAdmin:function(){return isAdmin;},requests:function(){return reqs;},approve:function(u){return fs.collection('treasurers').doc(u).set({at:new Date().toISOString()}).then(function(){return fs.collection('requests').doc(u).update({status:'ok'}).catch(function(){});});},revoke:function(u){return fs.collection('treasurers').doc(u).delete().then(function(){return fs.collection('requests').doc(u).update({status:'denied'}).catch(function(){});});},deny:function(u){return fs.collection('requests').doc(u).update({status:'denied'});},myReq:function(){return myReq;},ask:function(){return fs.collection('requests').doc(me.uid).set({name:me.displayName||'',contact:me.email||me.phoneNumber||'',at:new Date().toISOString()});},owns:function(cid){return !!K.own[cid];},mine:function(c){return !!c&&!!me&&(c._o===me.uid||(c._o===undefined&&(!!K.own[c.id]||isAdmin)));},uid:function(){return me&&me.uid;}};
 
   /* ---- what the app asks for ---- */
   function saveFile(o){
@@ -262,7 +309,7 @@
   window.claude={use:function(name){
     return ready.then(function(){
       if(name==='db')return {collection:collection};
-      if(name==='user')return {isOwner:function(){return isOwner;},can:function(){return true;},id:function(){return me.uid;},me:function(){return {id:me.uid,name:me.displayName||''};}};
+      if(name==='user')return {isOwner:function(){return true;},can:function(){return true;},id:function(){return me.uid;},me:function(){return {id:me.uid,name:me.displayName||''};}};
       if(name==='downloads')return {save:saveFile};
       return null;
     });
@@ -277,9 +324,9 @@
     showGate('',true);
     auth.onAuthStateChanged(function(u){
       if(!u){showGate('');return;}
-      me=u;isOwner=!!OWNER&&String(u.email||'').toLowerCase()===OWNER&&u.emailVerified!==false;
+      me=u;isAdmin=!!OWNER&&String(u.email||'').toLowerCase()===OWNER&&u.emailVerified!==false;
       hideGate();signOutBtn();
-      if(!isOwner)watchAccess();
+      watchAccess();watchUnlock();
       readyRes(true);
     });
   }

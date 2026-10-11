@@ -504,6 +504,10 @@ function logAdd(c,kind,text,by,data){
   return put('ledger',c.id+'_'+pad(seq,5)+'_'+uid().slice(0,4),e);
 }
 function myId(c){return c?ls('me:'+c.id):null;}
+/* hooks the website overrides (two roles on Home) */
+function homeTabs(){return '';}
+function homeShowCode(){return true;}
+function roleTag(c){return '';}
 function isTre(c){return !!c&&(myId(c)===c.tre||(!!S.owner&&S.mode!=='local'));}
 function isCos(c){return !!c&&!!c.cos&&myId(c)===c.cos;}
 function wordOf(c){return (c&&c.word)||'Chit';}
@@ -621,11 +625,12 @@ function viewHome(){
   if(mv)chits=chits.filter(function(c){var me=myId(c);return me&&memberById(c,me);});
   var pays=list('pays');
   var h='<div class="stack">'+topBar(false)+'<div class="brand">'+SAKHI+'<div><h1>Kitty Manager</h1><div class="mute small">Fair, clear and shared. Everyone sees the same books.</div>'+(S.mode==='live'||S.mode==='view'?'<div class="tiny"><span class="pill s-ready">'+(S.owner?'Treasurer view':'Member view')+'</span></div>':'')+'</div></div>'+banner();
+  h+=homeTabs();
   if(!S.ro&&!S.guest&&!mv){
     h+=homeSakhiBox()+skBanner(true);
     h+='<div class="btngrid">'+(S.owner?'<button class="btn pri" data-act="newchit">+ New chit</button>':'')+'<button class="btn pri" data-act="newparty">🎉 Organize party</button><button class="btn wide" data-act="teahome">☕ Tea &amp; Samosa party</button></div>';
   }
-  if(S.mode!=='local')h+='<button class="btn" data-act="homecode">I have an invite code</button>';
+  if(S.mode!=='local'&&homeShowCode())h+='<button class="btn" data-act="homecode">I have an invite code</button>';
   var act=chits.filter(function(c){return chitBucket(c)==='active';}),oldc=chits.filter(function(c){return chitBucket(c)==='archive';}),donec=chits.filter(function(c){return chitBucket(c)==='completed';});
   if(!S.guest)h+=festCard()+thoughtCard()+chatsBtn();
   if(!S.ro&&!S.guest)h+=upcomingCard();
@@ -668,7 +673,7 @@ function rsvpMap(){var o={};list('rsvp').forEach(function(r){o[r.id]=r;});return
 function viewChit(c){
   var tz=c.tz,today=todayIn(tz),pays=paysOf(c.id),me=myId(c);
   var h='<div class="stack">'+topBar(true)+banner()+chitArchBanner(c);
-  h+='<div><div class="row between"><h1>'+esc(c.name)+' '+esc(c.year)+'</h1>'+'<div class="row" style="gap:6px">'+invBtn(c)+manageBtn('c',c)+'</div></div><div class="mute small">'+esc(wordOf(c))+' · '+esc(c.cur)+' · '+c.members.length+' members · '+(c.status==='draft'?'Setting up':c.status==='closed'?'Closed':'Running')+'</div></div>';
+  h+='<div><div class="row between"><h1>'+esc(c.name)+' '+esc(c.year)+'</h1>'+'<div class="row" style="gap:6px">'+invBtn(c)+manageBtn('c',c)+'</div></div><div class="mute small">'+esc(wordOf(c))+' · '+esc(c.cur)+' · '+c.members.length+' members · '+(c.status==='draft'?'Setting up':c.status==='closed'?'Closed':'Running')+roleTag(c)+'</div></div>';
   if(me&&memberById(c,me))h+=chBigBtn('c',c.id,ct('chat'));
   if(S.tab==='month')h+=festCard()+thoughtCard();
   if(!me||!memberById(c,me)){
@@ -2942,7 +2947,7 @@ ACT.pgpaste=function(){
 document.addEventListener('input',function(e){if(e.target&&e.target.id==='pplace'){if(/https?:\/\//.test(e.target.value)){pgsApply(e.target.value);return;}if(S.sheet&&S.sheet.maps){S.sheet.maps='';var n=document.getElementById('pmapsnote');if(n)n.textContent='';}pgsRefresh();placeSug();}});
 document.addEventListener('focusin',function(e){if(e.target&&e.target.id==='pplace'){pgsRefresh();placeSug();}});
 
-if(window.__kmtest)window.__kmtest={S:S,ACT:ACT,waNum:waNum,ccOf:ccOf,waLink:waLink,render:render,ls:ls};
+if(window.__kmtest)window.__kmtest={S:S,ACT:ACT,waNum:waNum,ccOf:ccOf,waLink:waLink,render:render,ls:ls,put:put,list:list,G:G};
 
 ACT.wtre=function(){if(!S.wiz)return;S.wiz.step=2;S.wiz.err='';render(true);};
 
@@ -3931,8 +3936,8 @@ if(window.__KMW){
   var _inv=ACT.invite;
   ACT.invite=function(t,id){
     _inv.apply(this,arguments);
-    if(!window.__KMW.owner())return;
-    var c=G(),code=c&&c.inv&&c.inv[id],bc=document.querySelector('.bigcode');if(!code||!bc)return;
+    var c=G();if(!c||!window.__KMW.owns(c.id))return;
+    var code=c&&c.inv&&c.inv[id],bc=document.querySelector('.bigcode');if(!code||!bc)return;
     bc.insertAdjacentHTML('afterend','<div id="codechk" class="tiny mute">Checking this code on the website…</div>');
     var run=function(){window.__KMW.checkCode(code).then(function(st){
       var n=document.getElementById('codechk');if(!n)return;
@@ -3962,6 +3967,87 @@ if(window.__KMW){
       else toast(joinMsg(r),'warn');
       render(true);
     });
+  };
+}
+/* ===== two roles: Treasurer (chits I run) and Member (chits I joined), and for the admin a Requests tab ===== */
+if(window.__KMW){
+  var KW=window.__KMW;
+  var mineChit=function(c){return KW.mine(c);};
+  var CTX_ROLE=null;
+  var counts=function(){var own=0,inn=0;Object.keys(S.D.chits).forEach(function(id){if(mineChit(Object.assign({id:id},S.D.chits[id])))own++;else inn++;});return {own:own,inn:inn};};
+  var homeTab=function(){
+    var n=counts(),t=null;try{t=localStorage.getItem('km_home_tab');}catch(e){}
+    if(t==='req'&&KW.isAdmin())return 'req';
+    if(t==='run'||t==='in')return t;
+    return (n.own>0||(KW.unlocked()&&!n.inn))?'run':'in';
+  };
+  Object.defineProperty(S,'owner',{configurable:true,enumerable:true,
+    get:function(){
+      if(CTX_ROLE)return CTX_ROLE!=='in';
+      var c=S.cid&&S.D.chits[S.cid];
+      if(c)return mineChit(Object.assign({id:S.cid},c));
+      if(S.pid){var p=S.D.parties[S.pid];if(p&&p.cid&&S.D.chits[p.cid])return mineChit(Object.assign({id:p.cid},S.D.chits[p.cid]));}
+      if(!S.view||S.view==='home')return homeTab()!=='in';
+      return true;
+    },set:function(v){}});
+  try{var st2=document.createElement('style');st2.id='kmtabs';st2.textContent='.htabs{display:grid;gap:8px}.htabs button{border:2px solid var(--line,#e6dcd2);background:var(--card,#fffdfa);border-radius:14px;padding:10px 4px;font:700 15px system-ui;color:var(--mute,#74667a);cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:2px}.htabs button b{font-size:22px;line-height:1}.htabs button small{font-weight:600;font-size:12px}.htabs button.r[aria-selected=true]{border-color:#7b2d7e;background:#f1e1f1;color:#7b2d7e}.htabs button.m[aria-selected=true]{border-color:#12767a;background:#dff0ee;color:#12767a}.htabs button.q[aria-selected=true]{border-color:#b4412c;background:#f7e3dd;color:#b4412c}.htabs .bdg{background:#b4412c;color:#fff;border-radius:99px;font-size:11px;padding:1px 7px;margin-top:2px}';document.head.appendChild(st2);}catch(e){}
+
+  /* ---- the lock: only the admin and people she approved can create a chit ---- */
+  var showLock=function(){
+    var rq=KW.myReq(),st=rq?(rq.status==='denied'?'<b>Your request was not approved.</b> Please contact the email above if you think this is a mistake.':'<b>Request sent.</b> Radha will approve or deny it. You will see the answer here.'):'';
+    sheet('<div class="stack"><h2>🔒 Needs approval</h2><div class="small">Running your own chit needs approval. Please contact <b>radhakrishna.chavali@gmail.com</b> to unlock this feature.</div>'+(rq?'':'<div class="small mute">Or tap the button and your request goes to Radha in the app.</div>')+'<div id="lockmsg" class="small">'+st+'</div><div class="row">'+(rq?'':'<button class="btn pri" id="lockask" data-act="lockask">Ask for access</button>')+'<button class="btn" data-act="close">Close</button></div></div>');
+  };
+  window.__kmShowLock=showLock;
+  ACT.lockask=function(){KW.ask().then(function(){var b=document.getElementById('lockmsg');if(b)b.innerHTML='<b>Request sent.</b> Radha will approve or deny it. You will see the answer here.';var x=document.getElementById('lockask');if(x)x.style.display='none';},function(){var b=document.getElementById('lockmsg');if(b)b.textContent='Could not send the request. Please email radhakrishna.chavali@gmail.com.';});};
+  ['newchit','skchit'].forEach(function(k){var o=ACT[k];if(!o)return;ACT[k]=function(){if(!KW.unlocked()){showLock();return;}return o.apply(this,arguments);};});
+  var _sfs=ACT.skfstart;if(_sfs)ACT.skfstart=function(kind){if(kind==='chit'&&!KW.unlocked()){showLock();return;}return _sfs.apply(this,arguments);};
+
+  /* ---- admin: the Requests tab ---- */
+  var ago=function(iso){try{var d=new Date(iso);return isNaN(d)?'':d.toLocaleDateString('en-IN',{day:'numeric',month:'short'});}catch(e){return '';}};
+  var reqRow=function(x){
+    var act=x.status===''?'<div class="row" style="gap:6px"><button class="btn sm pri" data-act="reqok" data-id="'+esc(x.uid)+'">Approve</button><button class="btn sm" data-act="reqno" data-id="'+esc(x.uid)+'">Deny</button></div>':x.status==='denied'?'<button class="btn sm pri" data-act="reqok" data-id="'+esc(x.uid)+'">Approve</button>':'<button class="btn sm" data-act="reqlock" data-id="'+esc(x.uid)+'">Lock again</button>';
+    return '<div class="card"><div class="row between"><div style="min-width:0"><b>'+esc(x.name||'Someone')+'</b><div class="small mute">'+esc(x.contact)+'</div><div class="tiny mute">Asked '+esc(ago(x.at))+'</div></div>'+act+'</div></div>';
+  };
+  var reqSec=function(title,st,note){
+    var l=KW.requests().filter(function(x){return x.status===st;});
+    return '<h3>'+title+' <span class="mute small">'+l.length+'</span></h3>'+(l.length?l.map(reqRow).join(''):'<div class="small mute">'+note+'</div>');
+  };
+  var reqPage=function(){
+    return '<div class="notice info small">People ask for access when they tap + New chit. You decide each one.</div>'+reqSec('Waiting for you','','No requests waiting.')+reqSec('Approved','ok','Nobody approved yet.')+reqSec('Denied','denied','Nobody denied.');
+  };
+  var rqErr=function(){toast('Could not save. Check the Firebase rules are published.','warn');};
+  ACT.reqok=function(t,id){KW.approve(id).then(function(){toast('Approved. This person can now run chits.');},rqErr);};
+  ACT.reqno=function(t,id){KW.deny(id).then(function(){toast('Denied. The person will see that.');},rqErr);};
+  ACT.reqlock=function(t,id){KW.revoke(id).then(function(){toast('Locked again. Chits already created stay with that person.');},rqErr);};
+  window.__kmUnlockChanged=function(){try{if(S.loaded&&(!S.view||S.view==='home'))render(true);}catch(e){}};
+
+  homeTabs=function(){
+    var role=CTX_ROLE||homeTab(),n=counts(),wait=0,adm=KW.isAdmin(),nreq=adm?KW.requests().filter(function(x){return x.status==='';}).length:0;
+    try{list('pays').forEach(function(p){if(p.st==='waiting'&&S.D.chits[p.cid]&&mineChit(Object.assign({id:p.cid},S.D.chits[p.cid])))wait++;});}catch(e){}
+    return '<div class="htabs" style="grid-template-columns:'+(adm?'1fr 1fr 1fr':'1fr 1fr')+'" role="tablist">'
+     +'<button class="r" role="tab" data-act="htab" data-id="run" aria-selected="'+(role==='run')+'"><b>👑</b>Treasurer<small>'+n.own+' chit'+(n.own===1?'':'s')+'</small>'+(wait?'<span class="bdg">'+wait+' to confirm</span>':'')+'</button>'
+     +'<button class="m" role="tab" data-act="htab" data-id="in" aria-selected="'+(role==='in')+'"><b>🤝</b>Member<small>'+n.inn+' chit'+(n.inn===1?'':'s')+'</small></button>'
+     +(adm?'<button class="q" role="tab" data-act="htab" data-id="req" aria-selected="'+(role==='req')+'"><b>📝</b>Requests<small>'+(nreq?nreq+' waiting':'none waiting')+'</small></button>':'')
+     +'</div>'+(role==='in'&&!n.own?'<div class="notice info small">Want to run your own chit? Tap <b>Treasurer</b>.</div>':'');
+  };
+  homeShowCode=function(){return (CTX_ROLE||homeTab())==='in';};
+  roleTag=function(c){var m=mineChit(c);return '<div class="tiny"><span class="pill '+(m?'s-ready':'s-info')+'">'+(m?'You are the treasurer':'You are a member')+'</span></div>';};
+  ACT.htab=function(t,id){try{localStorage.setItem('km_home_tab',id==='in'?'in':id==='req'?'req':'run');}catch(e){}render(true);};
+  var _vh=viewHome;
+  viewHome=function(){
+    var role=homeTab(),_list=list;
+    if(role==='req'){
+      CTX_ROLE='req';
+      try{return '<div class="stack">'+topBar(false)+'<div class="brand">'+SAKHI+'<div><h1>Kitty Manager</h1><div class="mute small">Fair, clear and shared. Everyone sees the same books.</div><div class="tiny"><span class="pill s-ready">Admin</span></div></div></div>'+banner()+homeTabs()+reqPage()+'</div>';}finally{CTX_ROLE=null;}
+    }
+    CTX_ROLE=role;
+    list=function(col){
+      var r=_list(col);
+      if(col==='chits')r=r.filter(function(c){return role==='run'?mineChit(c):!mineChit(c);});
+      else if(col==='parties')r=r.filter(function(p){var c=p.cid&&S.D.chits[p.cid]?Object.assign({id:p.cid},S.D.chits[p.cid]):null;return role==='run'?(!p.cid||(c&&mineChit(c))):(!!c&&!mineChit(c));});
+      return r;
+    };
+    try{return _vh();}finally{list=_list;CTX_ROLE=null;}
   };
 }
 if(window.__KMW){
