@@ -252,7 +252,14 @@ function verifyDraw(c,draw){
   for(var i=0;i<draw.order.length;i++){d=drawNext(c,d);if(d.order[i]!==draw.order[i])return false;}
   return true;
 }
-function winnerMid(c,m){var o=c.draw&&c.draw.order&&c.draw.order[m];return o?o.split('#')[0]:null;}
+/* the treasurer can swap two months after the lottery (an exception with a reason). The lottery order itself is never changed, so Verify draw still works. */
+function effOrder(c){
+  var o=(c.draw&&c.draw.order||[]).slice(),ex=(c.draw&&c.draw.ex)||[];
+  ex.forEach(function(x){if(x.a<o.length&&x.b<o.length){var t=o[x.a];o[x.a]=o[x.b];o[x.b]=t;}});
+  return o;
+}
+function winnerMid(c,m){var o=effOrder(c)[m];return o?o.split('#')[0]:null;}
+function lotMid(c,m){var o=c.draw&&c.draw.order&&c.draw.order[m];return o?o.split('#')[0]:null;}
 function memberById(c,id){for(var i=0;i<c.members.length;i++)if(c.members[i].id===id)return c.members[i];return null;}
 function mname(c,id){var m=memberById(c,id);return m?m.name:'Former member';}
 function winMode(c){return !!c&&!!c.rules&&c.rules.collect==='winner';}
@@ -831,13 +838,14 @@ function tabDraw(c,pays,today){
   var luck=luckMap(c.id),tre=isTre(c);
   var h='<div class="stack">';
   if(c.draw&&c.draw.seed){
-    h+=sakhi('The winners were chosen by lottery only. Nobody can change this order. You can check it yourself with <b>Verify draw</b>.');
+    h+=sakhi(c.draw.ex&&c.draw.ex.length?'The winners were chosen by lottery. The treasurer made the changes listed below, each with a reason. The lottery itself can still be checked with <b>Verify draw</b>.':'The winners were chosen by lottery only. Nobody can change this order. You can check it yourself with <b>Verify draw</b>.');
     h+='<div class="draw">';
     for(var m=0;m<N(c);m++){
       var w=winnerMid(c,m);
-      h+='<div class="drow"><b class="mn">'+monthLabel(c,m)+'</b>'+(w?'<span class="crown">♛</span> <b>'+esc(mname(c,w))+'</b>':'<span class="mute">Not drawn yet</span>')+'</div>';
+      h+='<div class="drow"><b class="mn">'+monthLabel(c,m)+'</b>'+(w?'<span class="crown">♛</span> <b>'+esc(mname(c,w))+'</b>'+(lotMid(c,m)&&lotMid(c,m)!==w?' <span class="small mute">(lottery: '+esc(mname(c,lotMid(c,m)))+')</span>':''):'<span class="mute">Not drawn yet</span>')+'</div>';
     }
-    h+='</div><div class="row"><button class="btn pri" data-act="verify">Verify draw</button><button class="btn" data-act="replay">Watch replay</button><button class="btn" data-act="proof">Share proof</button></div>';
+    h+='</div>'+drawExCard(c,today);
+    h+='<div class="row"><button class="btn pri" data-act="verify">Verify draw</button><button class="btn" data-act="replay">Watch replay</button><button class="btn" data-act="proof">Share proof</button></div>';
     h+='<div class="small mute">Drawn on '+esc(c.draw.at)+'. Method v1: SHA-256 seed from the chit, the date and every lucky number, then a fixed shuffle.</div>';
     if(c.draw.mode==='month'&&c.status!=='draft'&&tre&&c.draw.order.length<N(c)){if(c.draw.order.length<=currentMonth(c,today))h+='<button class="go" data-act="drawnext">Draw '+monthLabel(c,c.draw.order.length)+' winner</button>';else h+='<div class="notice info">The next winner is drawn in '+monthLabel(c,c.draw.order.length)+'.</div>';}
     if(c.draw.mode==='month'&&c.status==='draft'&&tre)h+='<button class="btn" data-act="redraw">Draw again</button>';
@@ -1307,7 +1315,8 @@ ACT.verify=function(){
 };
 function proofText(c){
   var d=c.draw,l=['Draw proof: '+c.name+' '+c.year,'Drawn: '+d.at,'Method v1: SHA-256 of the text below gives the seed, then a seeded shuffle of the shares.','Seed text: '+d.seedText,'Seed (SHA-256): '+d.seed,'Winners:'];
-  for(var m=0;m<d.order.length;m++)l.push((m+1)+'. '+monthLabel(c,m)+' - '+mname(c,winnerMid(c,m)));
+  for(var m=0;m<d.order.length;m++)l.push((m+1)+'. '+monthLabel(c,m)+' - '+mname(c,lotMid(c,m)));
+  if(d.ex&&d.ex.length){l.push('');l.push('Changes by the treasurer after the lottery:');d.ex.forEach(function(x){l.push(monthLabel(c,x.a)+' and '+monthLabel(c,x.b)+' swapped on '+(x.at||'').slice(0,10)+'. Reason: '+x.why);});}
   return l.join('\n');
 }
 ACT.proof=function(){var c=G();if(c&&c.draw)textSheet('Draw proof',proofText(c));};
@@ -2016,6 +2025,49 @@ async function boot(){
 }
 
 ACT.openteatab=function(t,id){S.tab='tea';S.mon=null;go('chit',{cid:id});};
+
+/* ---- treasurer exception: swap two winners, with a reason ---- */
+function drawExMonths(c,today){
+  var out=[],cm=currentMonth(c,today),om=outsMap(c.id),eo=effOrder(c);
+  for(var m=cm;m<eo.length;m++){if(om[c.id+'_'+m])continue;out.push(m);}
+  return out;
+}
+function drawExCard(c,today){
+  var h='',ex=(c.draw&&c.draw.ex)||[];
+  if(ex.length){
+    h+='<div class="card stack"><b>Changes by the treasurer</b>'+ex.map(function(x){return '<div class="small"><b>'+esc(monthLabel(c,x.a))+' \u21C4 '+esc(monthLabel(c,x.b))+'</b> ('+esc((x.at||'').slice(0,10))+')<br>Reason: '+esc(x.why)+'</div>';}).join('')+'</div>';
+  }
+  if(isTre(c)&&!S.ro&&!c.archived&&c.status==='running'&&drawExMonths(c,today).length>1)h+='<button class="btn" data-act="dxo">Change a winner (exception)</button>';
+  return h;
+}
+ACT.dxo=function(){
+  var c=G();if(!c||!isTre(c)||S.ro||!c.draw)return;
+  var ms=drawExMonths(c,todayIn(c.tz));
+  if(ms.length<2){toast('There are not two months that can be swapped.','warn');return;}
+  var opt=function(){return ms.map(function(m){return '<option value="'+m+'">'+esc(monthLabel(c,m)+' - '+mname(c,winnerMid(c,m)))+'</option>';}).join('');};
+  S.sheet={t:'dx'};
+  sheet('<div class="stack"><h2>Change a winner</h2><div class="small mute">Use this only as an exception. Swap two months, so each person keeps one turn. Months already paid out cannot be changed. Everyone will see the change and your reason.</div>'
+   +'<label class="f">First month<select id="dxa"><option value="">Choose</option>'+opt()+'</select></label>'
+   +'<label class="f">Swap with<select id="dxb"><option value="">Choose</option>'+opt()+'</select></label>'
+   +'<label class="f">Reason (required)<input id="dxw" maxlength="120" placeholder="for example Bela does not need the money this month"></label>'
+   +'<div id="serr"></div><div class="row"><button class="btn pri" data-act="dxsave">Swap</button><button class="btn" data-act="close">Cancel</button></div></div>');
+};
+ACT.dxsave=function(){
+  var c=G();if(!c||!isTre(c)||S.ro||!c.draw)return;
+  var a=parseInt(val('dxa'),10),b=parseInt(val('dxb'),10),why=val('dxw').trim();
+  var ms=drawExMonths(c,todayIn(c.tz));
+  if(isNaN(a)||isNaN(b))return serr('Choose both months.');
+  if(a===b)return serr('Choose two different months.');
+  if(ms.indexOf(a)<0||ms.indexOf(b)<0)return serr('That month cannot be changed.');
+  if(winnerMid(c,a)===winnerMid(c,b))return serr('Both months have the same winner.');
+  if(why.length<5)return serr('Write the reason (at least 5 letters).');
+  var wa=mname(c,winnerMid(c,a)),wb=mname(c,winnerMid(c,b));
+  var ex=((c.draw.ex)||[]).concat([{a:a,b:b,why:why,at:isoNow(),by:myId(c)}]);
+  var c2=Object.assign({},c,{draw:Object.assign({},c.draw,{ex:ex})});
+  put('chits',c.id,c2);
+  logAdd(c2,'draw','Treasurer swapped winners: '+monthLabel(c,a)+' now '+wb+', '+monthLabel(c,b)+' now '+wa+'. Reason: '+why,myId(c),{a:a,b:b});
+  closeSheet();toast('Swapped. Everyone can see the reason.');
+};
 /* ===== Sakhi: the friendly helper (suggests, never decides) ===== */
 var SK={open:false,msgs:[],busy:false,ctl:null,sm:undefined,menu:false,pre:null};
 var SKT={
@@ -2669,7 +2721,7 @@ function skFlowHtml(){
     }
   }else if(f.t==='party'){
     if(f.step===0){
-      h+='<b>'+esc(ft('which'))+'</b><div class="row">'+list('chits').map(function(c){return '<button class="chip" data-act="skpg" data-id="'+esc(c.id)+'">'+esc(c.name+' '+c.year)+'</button>';}).join('')+'</div>';
+      h+='<b>'+esc(ft('which'))+'</b><div class="row">'+list('chits').filter(function(c){return !c.archived&&c.status!=='closed';}).map(function(c){return '<button class="chip" data-act="skpg" data-id="'+esc(c.id)+'">'+esc(c.name+' '+c.year)+'</button>';}).join('')+'</div>';
     }else if(f.step===1){
       h+='<b>'+esc(ft('pq1'))+'</b><div class="row">'+[2000,3000,5000,8000,10000].map(function(b){return '<button class="chip" data-act="skpb" data-id="'+b+'">'+b+'</button>';}).join('')+'</div><div class="row" style="flex-wrap:nowrap"><input id="pbud2" type="number" inputmode="numeric" placeholder="5000"><button class="btn pri" data-act="skpb" data-id="custom">'+esc(ft('next'))+'</button></div><div id="fe"></div>';
     }else if(f.step==='host'){
@@ -2694,7 +2746,7 @@ ACT.skfstart=function(kind){
     if(!S.owner||S.ro){toast('Only the treasurer who owns this app can create a chit.','warn');return;}
     SK.flow={t:'chit',step:'t0',d:{}};
   }else{
-    var cs=list('chits');
+    var cs=list('chits').filter(function(c){return !c.archived&&c.status!=='closed';});
     if(!cs.length){ACT.skclose();ACT.newparty({getAttribute:function(){return null;}});return;}
     var today=todayIn(phoneTz());
     SK.flow={t:'party',step:cs.length>1?0:1,d:{cid:cs[0].id,date:nextDow(today,6),time:'16:00',dress:skPickTheme()||''}};
@@ -2839,7 +2891,7 @@ function teaPick(cid){
   ACT.teacreate();
 }
 ACT.teahome=function(){
-  if(S.ro)return;var cs=list('chits');
+  if(S.ro)return;var cs=list('chits').filter(function(c){return !c.archived&&c.status!=='closed';});
   if(!cs.length){toast('Start a chit first. Tea and Samosa belongs to a chit.');return;}
   if(cs.length===1){teaPick(cs[0].id);return;}
   sheet('<div class="stack"><h2>\u2615 Tea &amp; Samosa party</h2><div class="small mute">Which chit group is it for?</div>'+cs.map(function(c){return '<button class="btn" data-act="teapick" data-id="'+esc(c.id)+'">'+esc(c.name+' '+c.year)+'</button>';}).join('')+'<button class="btn" data-act="close">Cancel</button></div>');
@@ -3345,7 +3397,7 @@ function chitCsv(c){
   var q=function(s){return '"'+String(s==null?'':s).replace(/"/g,'""')+'"';},rows=[['Section','Name','Month','Amount','Status','Date']];
   c.members.forEach(function(m){rows.push(['Member',m.name,'',m.shares||1,'','']);});
   list('pays').filter(function(p){return p.cid===c.id;}).forEach(function(p){var m=memberById(c,p.mid);rows.push(['Payment',m?m.name:p.mid,(p.m||0)+1,fromMinor(p.amt||0,c.cur),p.st,p.date||'']);});
-  if(c.draw&&c.draw.order)c.draw.order.forEach(function(o,i){var m=memberById(c,o.split('#')[0]);rows.push(['Draw','' +(m?m.name:o),i+1,'','','']);});
+  if(c.draw&&c.draw.order)effOrder(c).forEach(function(o,i){var m=memberById(c,o.split('#')[0]);rows.push(['Draw','' +(m?m.name:o),i+1,'','','']);});
   return rows.map(function(r){return r.map(q).join(',');}).join('\n');
 }
 function chitLogText(c){

@@ -197,14 +197,23 @@
       return fs.collection(col).onSnapshot(function(s){noteDocs(col,s.docs);if(col==='chits')s.docs.forEach(function(d){lastChits[d.id]=d.data();ensureCodes(d.id,d.data());});cb({docs:s.docs.map(wrap)});},errcb);
     }
     /* a member: one listener per group she may read, merged into one list */
-    var subs={},bag={},dead=false,first=false;
+    var subs={},bag={},tries={},dead=false,first=false;
     function emit(){var all=[];Object.keys(bag).forEach(function(g){all=all.concat(bag[g]);});noteDocs(col,all);cb({docs:all.map(wrap)});}
     function sync(){
       if(dead)return;
       var want=accessG.concat(['_u_'+me.uid]);
       want.forEach(function(g){
         if(subs[g])return;
-        subs[g]=fs.collection(col).where('_g','==',g).onSnapshot(function(s){bag[g]=s.docs;emit();},function(e){lastLoadErr=(e&&e.code)||String(e);if(errcb&&!(e&&e.code==='permission-denied'&&g!=='_u_'+me.uid))errcb(e);});
+        subs[g]=fs.collection(col).where('_g','==',g).onSnapshot(function(s){bag[g]=s.docs;emit();},function(e){
+          lastLoadErr=col+': '+((e&&e.code)||String(e));
+          try{subs[g]=null;delete subs[g];}catch(_){}
+          /* a read refused right after joining: try again a few times */
+          if(e&&e.code==='permission-denied'&&!dead){
+            tries[g]=(tries[g]||0)+1;
+            if(tries[g]<=5){setTimeout(function(){if(!dead)sync();},1200*tries[g]);return;}
+          }
+          if(errcb&&!(e&&e.code==='permission-denied'&&g!=='_u_'+me.uid))errcb(e);
+        });
       });
       Object.keys(subs).forEach(function(g){if(want.indexOf(g)<0){subs[g]();delete subs[g];delete bag[g];emit();}});
       if(!first){first=true;emit();}
@@ -213,7 +222,9 @@
     return function(){dead=true;Object.keys(subs).forEach(function(g){subs[g]();});};
   }
   function watchAccess(){
-    accessUnsub=fs.collection('access').doc(me.uid).onSnapshot(function(s){
+    accessUnsub=fs.collection('access').doc(me.uid).onSnapshot({includeMetadataChanges:true},function(s){
+      /* wait until the server has really saved the access (a local copy is not enough: the server would still refuse the reads) */
+      if(s.metadata&&s.metadata.hasPendingWrites)return;
       accessG=(s.exists&&s.data().g)||[];accessLoaded=true;accessWait.forEach(function(f){f();});
     },function(){accessG=[];accessLoaded=true;accessWait.forEach(function(f){f();});});
   }
