@@ -1,0 +1,28 @@
+APP NAME (30 max): Kitty Manager
+
+SHORT DESCRIPTION (80 max):
+Run your chit or kitty fairly: lottery draw, due dates and shared records.
+
+FULL DESCRIPTION:
+Kitty Manager helps a group of friends, family or colleagues run a chit or kitty with trust and clarity.
+
+What you can do
+- Start a chit in a few taps: members, monthly amount, due day and grace days.
+- Fair lottery draw: winners are chosen by a lottery that every member can verify.
+- See who has paid on one simple board that everyone shares.
+- Add payments with an optional screenshot. The winner or treasurer confirms.
+- Send each member a join code on WhatsApp.
+- Plan kitty parties, split bills and keep a Tea and Samosa day.
+- Use it as treasurer or as member, in English, Hindi and more.
+
+Safe and honest
+- Payment screenshots are private to the person who sent it, the winner and the treasurer.
+- The history only grows. Old entries cannot be edited.
+- Kitty Manager keeps records only. It never holds or moves money.
+
+CATEGORY: Finance (or Productivity)
+CONTACT EMAIL: radhakrishna.chavali@gmail.com
+WEBSITE: https://kitty-manager.com
+PRIVACY POLICY URL: https://kitty-manager.com/privacy.html
+ACCOUNT DELETION URL: https://kitty-manager.com/delete-account.html
+CONTENT RATING: everyone; no ads; no in-app purchases
