@@ -864,7 +864,7 @@ function agreementText(c){
   L.push('The winner of each month is chosen by lottery only, '+(r.drawMode==='month'?'drawn each month.':'drawn once for all '+N(c)+' months before the year starts.')+' Every share wins once.');
   if(winMode(c))L.push('The winner of each month collects the money directly from the other members. Every online payment needs a screenshot, either the UPI payment or the WhatsApp confirmation. The winner confirms each payment and the treasurer can step in. Everyone can see who has paid.');
   else L.push('The winner is paid on day '+r.payDay+'. '+(r.payRule==='part'?'The payout is whatever has been collected.':'The payout is made when the whole pool is collected.'));
-  L.push('Members who have already won keep paying every month until the end of the year.');
+  L.push('Members who have already won must continue to pay their contribution every month until the end of the '+w+' term ('+N(c)+' months), as agreed at the beginning.');
   L.push('These rules are locked for '+N(c)+' months once the treasurer starts the '+w+'.');
   L.push(r.privacy==='status'?'Members see their own amounts and everyone’s status, not other people’s amounts.':'All members can see all amounts.');
   return L;
@@ -3866,14 +3866,37 @@ if(window.__KMW){
   APP_LINK=location.origin+location.pathname;
   guessLink=function(){return location.origin+location.pathname;};
   skCanAI=function(){return false;};
+  /* the invite link on the website always points at this website and carries the member's code, so one tap joins */
+  var _it=inviteText;
+  inviteText=function(c,m,link){return _it(c,m,APP_LINK+'?join='+((c.inv&&c.inv[m.id])||''));};
+  try{var st=document.createElement('style');st.id='kmhideinv';st.textContent='label.f:has(#ilink),label.f:has(#alink),#ilnote{display:none!important}';document.head.appendChild(st);}catch(e){}
+  var joinMsg=function(r){
+    if(r.why==='format')return 'Type all 6 characters of the code.';
+    if(r.why==='notfound')return 'That code was not found. Check the 6 characters. If they are right, ask the treasurer to open kitty-manager.com once and send you the invite again.';
+    return 'Could not join ('+r.why+(r.detail?': '+r.detail:'')+'). Check your internet and try again. If it still fails, send this message to the treasurer.';
+  };
+  /* treasurer: when an invite sheet opens, show whether that code works on the website */
+  var _inv=ACT.invite;
+  ACT.invite=function(t,id){
+    _inv.apply(this,arguments);
+    if(!window.__KMW.owner())return;
+    var c=G(),code=c&&c.inv&&c.inv[id],bc=document.querySelector('.bigcode');if(!code||!bc)return;
+    bc.insertAdjacentHTML('afterend','<div id="codechk" class="tiny mute">Checking this code on the website…</div>');
+    var run=function(){window.__KMW.checkCode(code).then(function(st){
+      var n=document.getElementById('codechk');if(!n)return;
+      if(st==='ok'){n.className='tiny';n.style.color='var(--ok,#1f7a4d)';n.textContent='✓ This code works on the website.';}
+      else{n.className='notice warn small';n.innerHTML='⚠ This code is not on the website yet ('+esc(st)+'). <button class="btn sm" id="codefix">Fix it</button>';var b=document.getElementById('codefix');if(b)b.onclick=function(){n.textContent='Saving…';window.__KMW.republish().then(function(){setTimeout(run,600);});};}
+    });};
+    run();
+  };
   /* joining: first ask the website to open the chit for this code, then run the normal join */
   var _jgo=ACT.jgo;
   ACT.jgo=function(){
     var code=val('hcode');
     if(findByCode(code)){_jgo();return;}
     serr('Checking the code…');
-    window.__KMW.redeem(code).then(function(ok){
-      if(ok)_jgo();else serr('That code was not found. Check the 6 characters, or ask the treasurer.');
+    window.__KMW.redeem(code).then(function(r){
+      if(r.ok)_jgo();else serr(joinMsg(r));
     });
   };
   tryPending=function(){
@@ -3881,10 +3904,10 @@ if(window.__KMW){
     var code=S.pendingCode;
     if(findByCode(code)){var f=acceptCode(code);S.pendingCode=null;if(f){S.tab='month';S.mon=null;S.view='chit';S.cid=f.cid;toast('Welcome, '+mname(S.D.chits[f.cid],f.mid));render(true);}return;}
     S.pendingBusy=true;
-    window.__KMW.redeem(code).then(function(ok){
-      S.pendingBusy=false;S.pendingCode=null;
+    window.__KMW.redeem(code).then(function(r){
+      var ok=r.ok;S.pendingBusy=false;S.pendingCode=null;
       if(ok){var f=acceptCode(code);if(f){S.tab='month';S.mon=null;S.view='chit';S.cid=f.cid;toast('Welcome, '+mname(S.D.chits[f.cid],f.mid));}}
-      else toast('That join link did not work. Ask the treasurer for a new code.','warn');
+      else toast(joinMsg(r),'warn');
       render(true);
     });
   };

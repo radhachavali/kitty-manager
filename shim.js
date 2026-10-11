@@ -10,7 +10,7 @@
   var OWNER=String(CFG.owner||'').toLowerCase();
   var gate=null,me=null,isOwner=false,fs=null,auth=null,readyRes,ready=new Promise(function(r){readyRes=r;});
   var K={chits:{},parties:{}};            // groups this page knows about
-  var accessG=[],accessWait=[],accessLoaded=false,accessUnsub=null;
+  var accessG=[],accessWait=[],accessLoaded=false,accessUnsub=null,lastLoadErr='';
 
   function el(h){var d=document.createElement('div');d.innerHTML=h;return d.firstChild;}
   var BTN='width:100%;min-height:58px;border-radius:16px;border:0;font:800 20px system-ui;cursor:pointer;';
@@ -128,10 +128,49 @@
   var lastChits={};
 
   /* ---- codes index: the admin publishes each join code so a member can find her chit ---- */
+  var pubKey={},codeBan=null;
+  function sleep(ms){return new Promise(function(r){setTimeout(r,ms);});}
+  function setCode(code,cid,mid){
+    var ref=fs.collection('codes').doc(code),n=0;
+    function go(){return ref.set({cid:cid,mid:mid}).catch(function(e){if(n++<2&&!(e&&e.code==='permission-denied'))return sleep(900).then(go);throw e;});}
+    return go();
+  }
+  function showCodeWarn(err){
+    if(!isOwner)return;
+    if(!err){if(codeBan){codeBan.remove();codeBan=null;}return;}
+    if(!codeBan){
+      codeBan=el('<div id="kmcodewarn" style="position:fixed;left:10px;right:10px;top:10px;z-index:60;background:#fde8e8;color:#8a1c1c;border:2px solid #d94b4b;border-radius:14px;padding:10px 12px;font:700 14px/1.4 system-ui"><div id="kmcwt"></div><button id="kmcwb" style="margin-top:8px;border:0;border-radius:10px;background:#8a1c1c;color:#fff;padding:8px 14px;font:700 14px system-ui">Try again</button></div>');
+      document.body.appendChild(codeBan);
+      codeBan.querySelector('#kmcwb').onclick=function(){republishAll(true);};
+    }
+    codeBan.querySelector('#kmcwt').textContent='Warning: the join codes could not be saved on the website ('+err+'). Members cannot join until this is fixed. Check that the Firebase rules are published, then tap Try again.';
+  }
+  /* write every code of a chit and report the ones that failed */
+  function publishCodes(id,inv){
+    var list=Object.keys(inv||{}).map(function(m){return [inv[m],m];});
+    return Promise.all(list.map(function(p){return setCode(p[0],id,p[1]).then(function(){return null;},function(e){return {code:p[0],err:(e&&e.code)||String(e)};});})).then(function(r){return r.filter(Boolean);});
+  }
   function syncCodes(id,data){
     var old=lastChits[id]&&lastChits[id].inv||{},nu=(data&&data.inv)||{},seen={};
-    Object.keys(nu).forEach(function(mid){var code=nu[mid];seen[code]=1;fs.collection('codes').doc(code).set({cid:id,mid:mid}).catch(function(){});});
+    Object.keys(nu).forEach(function(mid){seen[nu[mid]]=1;});
     Object.keys(old).forEach(function(mid){var code=old[mid];if(!seen[code])fs.collection('codes').doc(code).delete().catch(function(){});});
+    if(!data)return;
+    pubKey[id]=JSON.stringify(nu);
+    publishCodes(id,nu).then(function(bad){showCodeWarn(bad.length?bad[0].err:'');});
+  }
+  /* each time the admin opens the website, make sure every chit's codes are on the website (old chits too) */
+  function ensureCodes(id,data,force){
+    var nu=(data&&data.inv)||{},key=JSON.stringify(nu);
+    if(!Object.keys(nu).length||(!force&&pubKey[id]===key))return Promise.resolve([]);
+    pubKey[id]=key;
+    return publishCodes(id,nu).then(function(bad){showCodeWarn(bad.length?bad[0].err:'');if(bad.length)delete pubKey[id];return bad;});
+  }
+  function republishAll(force){
+    return Promise.all(Object.keys(lastChits).map(function(id){return ensureCodes(id,lastChits[id],force);}));
+  }
+  /* is this code on the website? */
+  function checkCode(code){
+    return fs.collection('codes').doc(code).get().then(function(d){return d.exists?'ok':'missing';},function(e){return (e&&e.code)||'error';});
   }
 
   /* ---- the db the app sees ---- */
@@ -155,7 +194,7 @@
   }
   function listen(col,cb,errcb){
     if(isOwner){
-      return fs.collection(col).onSnapshot(function(s){noteDocs(col,s.docs);if(col==='chits')s.docs.forEach(function(d){lastChits[d.id]=d.data();});cb({docs:s.docs.map(wrap)});},errcb);
+      return fs.collection(col).onSnapshot(function(s){noteDocs(col,s.docs);if(col==='chits')s.docs.forEach(function(d){lastChits[d.id]=d.data();ensureCodes(d.id,d.data());});cb({docs:s.docs.map(wrap)});},errcb);
     }
     /* a member: one listener per group she may read, merged into one list */
     var subs={},bag={},dead=false,first=false;
@@ -165,7 +204,7 @@
       var want=accessG.concat(['_u_'+me.uid]);
       want.forEach(function(g){
         if(subs[g])return;
-        subs[g]=fs.collection(col).where('_g','==',g).onSnapshot(function(s){bag[g]=s.docs;emit();},function(e){if(errcb&&!(e&&e.code==='permission-denied'&&g!=='_u_'+me.uid))errcb(e);});
+        subs[g]=fs.collection(col).where('_g','==',g).onSnapshot(function(s){bag[g]=s.docs;emit();},function(e){lastLoadErr=(e&&e.code)||String(e);if(errcb&&!(e&&e.code==='permission-denied'&&g!=='_u_'+me.uid))errcb(e);});
       });
       Object.keys(subs).forEach(function(g){if(want.indexOf(g)<0){subs[g]();delete subs[g];delete bag[g];emit();}});
       if(!first){first=true;emit();}
@@ -180,22 +219,28 @@
   }
 
   /* ---- joining with a code ---- */
-  function sleep(ms){return new Promise(function(r){setTimeout(r,ms);});}
+  /* returns {ok:true} or {ok:false, why, detail}: why = format | notfound | codes-read | access-read | access-write | load */
+  function ecode(e){return (e&&e.code)||String(e&&e.message||e).slice(0,60);}
   async function redeem(code){
     code=String(code||'').normalize('NFKC').toUpperCase().replace(/[^A-Z0-9]/g,'');
-    if(code.length!==6)return false;
-    var cd;try{cd=await fs.collection('codes').doc(code).get();}catch(e){return false;}
-    if(!cd.exists)return false;
+    if(code.length!==6)return {ok:false,why:'format'};
+    var cd;try{cd=await fs.collection('codes').doc(code).get();}catch(e){return {ok:false,why:'codes-read',detail:ecode(e)};}
+    if(!cd.exists)return {ok:false,why:'notfound'};
     var cid=cd.data().cid;
-    if(isOwner)return true;
-    if(accessG.indexOf(cid)<0){
-      try{await fs.collection('access').doc(me.uid).set({g:accessG.concat([cid]),code:code});}catch(e){return false;}
+    if(isOwner)return {ok:true};
+    var cur=[];
+    try{var ad=await fs.collection('access').doc(me.uid).get();cur=(ad.exists&&ad.data().g)||[];}catch(e){return {ok:false,why:'access-read',detail:ecode(e)};}
+    if(cur.indexOf(cid)<0){
+      try{await fs.collection('access').doc(me.uid).set({g:cur.concat([cid]),code:code});}catch(e){return {ok:false,why:'access-write',detail:ecode(e)};}
+      cur=cur.concat([cid]);
     }
-    for(var i=0;i<50;i++){if(K.chits[cid])break;await sleep(200);}
+    if(accessG.indexOf(cid)<0){accessG=accessG.concat([cid]);accessWait.forEach(function(f){f();});}
+    for(var i=0;i<70;i++){if(K.chits[cid])break;await sleep(200);}
+    if(!K.chits[cid])return {ok:false,why:'load',detail:lastLoadErr||'timeout'};
     await sleep(350);
-    return !!K.chits[cid];
+    return {ok:true};
   }
-  window.__KMW={redeem:redeem,owner:function(){return isOwner;},uid:function(){return me&&me.uid;}};
+  window.__KMW={redeem:redeem,checkCode:checkCode,republish:function(){return republishAll(true);},owner:function(){return isOwner;},uid:function(){return me&&me.uid;}};
 
   /* ---- what the app asks for ---- */
   function saveFile(o){
