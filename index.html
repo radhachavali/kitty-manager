@@ -483,7 +483,7 @@ function flush(){
     var it=Q[0],ref=S.db.collection(it.col).doc(it.id);
     var op=(it.data===null?ref.delete():ref.set(it.data)).catch(function(e){if(isPermErr(e)){S.permDrop=true;return 'perm';}throw e;});
     return Promise.race([op,new Promise(function(_,rej){setTimeout(function(){rej(new Error('slow'));},12000);})]).then(function(r0){
-      var pm=r0==='perm';var d=Q.shift();if(pm)S.err='perm';else{S.err=null;Sent.push({col:d.col,id:d.id,data:d.data,t:Date.now()});}qsave();rebuild();return step();
+      var pm=r0==='perm';var ix=Q.indexOf(it);if(ix>-1)Q.splice(ix,1);var d=it;if(pm)S.err='perm';else{S.err=null;Sent.push({col:d.col,id:d.id,data:d.data,t:Date.now()});}qsave();rebuild();return step();
     });
   }
   return step().catch(function(e){S.err=String((e&&e.message)||e).indexOf('slow')>-1?'The connection is slow. Your entries are safe on this phone.':'Could not upload yet. Your entries are safe on this phone.';}).then(function(){flushing=false;rebuild();render();});
@@ -1391,6 +1391,7 @@ function wipeParty(pid){
 ACT.del2=function(){
   var c=G();if(!c||!tAdmin(c))return;
   if(c.status!=='draft'&&val('dconf').trim().toUpperCase()!=='DELETE')return serr('Type the word DELETE to confirm.');
+  put('chits',c.id,Object.assign({},c,{status:'deleting'}));
   list('parties').filter(function(p){return p.cid===c.id;}).forEach(function(p){wipeParty(p.id);});
   ['luck','agree','ledger','pays','outs','proofs'].forEach(function(col){list(col).filter(function(x){return x.cid===c.id;}).forEach(function(x){put(col,x.id,null);});});
   put('chits',c.id,null);ls('me:'+c.id,null);closeSheet();go('home',{cid:null,pid:null});toast('Deleted');
@@ -3947,11 +3948,16 @@ if(window.__KMW){
     run();
   };
   /* joining: first ask the website to open the chit for this code, then run the normal join */
+  /* members do not hold the other members' codes any more: after joining, the code she typed is remembered on this phone */
+  var _find0=findByCode;
+  findByCode=function(code){var r=_find0(code);return r||window.__KMW.lookup(code);};
+  var _ens0=ensureInv;
+  ensureInv=function(){if(!window.__KMW.invsLoaded())return G();return _ens0();};
   var _jgo=ACT.jgo;
   ACT.jgo=function(){
     var code=val('hcode');
-    if(findByCode(code)){_jgo();return;}
     serr('Checking the code…');
+    /* always check with the website first: it also saves who she is in this chit (needed by the privacy rules) */
     window.__KMW.redeem(code).then(function(r){
       if(r.ok)_jgo();else serr(joinMsg(r));
     });
@@ -3959,7 +3965,6 @@ if(window.__KMW){
   tryPending=function(){
     if(!S.pendingCode||!S.loaded||S.pendingBusy)return;
     var code=S.pendingCode;
-    if(findByCode(code)){var f=acceptCode(code);S.pendingCode=null;if(f){S.tab='month';S.mon=null;S.view='chit';S.cid=f.cid;toast('Welcome, '+mname(S.D.chits[f.cid],f.mid));render(true);}return;}
     S.pendingBusy=true;
     window.__KMW.redeem(code).then(function(r){
       var ok=r.ok;S.pendingBusy=false;S.pendingCode=null;

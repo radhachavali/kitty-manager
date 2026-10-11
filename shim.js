@@ -123,9 +123,9 @@
     if(col==='chits')docs.forEach(function(d){K.chits[d.id]=1;});
     if(col==='parties')docs.forEach(function(d){var v=d.data();K.parties[d.id]=(v&&(v._g||v.cid))||d.id;});
   }
-  function strip(o){var r={};Object.keys(o||{}).forEach(function(k){if(k!=='_g')r[k]=o[k];});return r;}
-  function wrap(d,col){return {id:d.id,data:function(){var o=strip(d.data());if(col==='chits'&&isAdmin&&o._o===undefined)o._o=me.uid;return o;}};}
-  var lastChits={};
+  function strip(o){var r={};Object.keys(o||{}).forEach(function(k){if(k!=='_g'&&k!=='_w')r[k]=o[k];});return r;}
+  function wrap(d,col){return {id:d.id,data:function(){var o=strip(d.data());if(col==='chits'){if(isAdmin&&o._o===undefined)o._o=me.uid;if(invCache[d.id])o.inv=invCache[d.id];}return o;}};}
+  var markedDeleting={},lastChits={},invCache={},invsLoaded=false,reEmitChits=null,migrating={};
 
   /* ---- codes index: the admin publishes each join code so a member can find her chit ---- */
   var pubKey={},codeBan=null;
@@ -174,20 +174,54 @@
 
   /* ---- the db the app sees ---- */
   function collection(col){
+    if(col==='shots'||col==='dms'){
+      /* screenshots are opened one at a time by id (the rules show each one only to its owner, the winner and the treasurer); private chats are not on the website yet */
+      return {doc:function(id){var ref=fs.collection(col).doc(id);return {
+        set:function(data){var d=JSON.parse(JSON.stringify(data));d._g=groupOf(col,id,data);d._w=me.uid;return ref.set(d);},
+        delete:function(){return ref.delete();},
+        get:function(){return ref.get().then(function(r){return {exists:r.exists,id:r.id,data:function(){return strip(r.data());}};});}};},
+        onSnapshot:function(cb){setTimeout(function(){cb({docs:[]});},0);return function(){};}};
+    }
     return {
       doc:function(id){
         var ref=fs.collection(col).doc(id);
         return {
           set:function(data){
             if(col==='chits'&&!canMake&&!K.own[id]&&!(data&&data._o===me.uid)){if(window.__kmShowLock)window.__kmShowLock();return Promise.reject(Object.assign(new Error('locked'),{code:'permission-denied'}));}
-            var oldInv=null;
-            if(col==='chits'){K.chits[id]=1;K.own[id]=1;oldInv=(lastChits[id]&&lastChits[id].inv)||{};lastChits[id]=data;}
+            var oldInv=null,inv=null,stripInv=false;
+            if(col==='chits'){
+              /* the join codes live in their own record (invs), seen only by the treasurer: members' copy of the chit must not hold everyone's codes */
+              if(data&&data.inv===undefined&&invCache[id])data=Object.assign({},data,{inv:invCache[id]});
+              inv=data&&data.inv?data.inv:null;
+              /* the codes are taken out of the chit only once their own record is known to work (invCache); until then they stay in the chit and are moved by migrateInv */
+              stripInv=!!(inv&&invCache[id]);
+              K.chits[id]=1;K.own[id]=1;oldInv=(lastChits[id]&&lastChits[id].inv)||{};lastChits[id]=data;
+            }
             var g=groupOf(col,id,data),d=JSON.parse(JSON.stringify(data));d._g=g;
+            if(stripInv)delete d.inv;
             if(col==='parties')K.parties[id]=g;
             if(col==='chits'&&!d._o)d._o=me.uid;
-            return ref.set(d).then(function(){if(col==='chits'){runSyncs();syncCodes(id,data,oldInv);}});
+            if(col==='shots')d._w=me.uid;
+            return ref.set(d).then(function(){
+              if(col==='chits'){
+                runSyncs();
+                if(inv){if(stripInv){invCache[id]=inv;fs.collection('invs').doc(id).set({inv:inv,_g:id,_o:d._o}).catch(function(){});}syncCodes(id,data,oldInv);}
+              }
+            });
           },
-          delete:function(){if(col==='chits'){var pr=syncCodes(id,null,(lastChits[id]&&lastChits[id].inv)||{});delete lastChits[id];delete K.own[id];return pr.then(function(){return ref.delete();});}return ref.delete();},
+          delete:function(){
+            if(col==='chits'){
+              var pr=syncCodes(id,null,(lastChits[id]&&lastChits[id].inv)||{});delete lastChits[id];delete K.own[id];delete invCache[id];
+              return pr.then(function(){return fs.collection('invs').doc(id).delete().catch(function(){});}).then(function(){return ref.delete();});
+            }
+            /* the log can only be removed while the whole chit is being deleted: mark the chit first (this cannot be undone) */
+            if(col==='ledger'){
+              var cid0=String(id).split('_')[0];
+              if(!markedDeleting[cid0])markedDeleting[cid0]=fs.collection('chits').doc(cid0).update({status:'deleting'}).catch(function(){});
+              return markedDeleting[cid0].then(function(){return ref.delete();});
+            }
+            return ref.delete();
+          },
           get:function(){return ref.get().then(function(r){return {exists:r.exists,id:r.id,data:function(){return strip(r.data());}};});}
         };
       },
@@ -197,6 +231,25 @@
   function runSyncs(){accessWait.forEach(function(f){f();});}
   var stamped={};
   /* the chits this person runs: found from the chits she owns. The admin also claims old chits that have no owner yet. */
+  /* old chits kept the codes inside the chit: move them into the treasurer-only record once, then take them out of the chit */
+  function migrateInv(id,v){
+    var o=v._o||me.uid;
+    fs.collection('invs').doc(id).set({inv:v.inv,_g:id,_o:o}).then(function(){
+      invCache[id]=v.inv;
+      /* take only the codes out of the chit (an update of one field, so a change made at the same moment is not overwritten) */
+      return fs.collection('chits').doc(id).update({inv:firebase.firestore.FieldValue.delete()});
+    }).catch(function(){delete migrating[id];});
+  }
+  function watchInvs(){
+    var q=isAdmin?fs.collection('invs'):fs.collection('invs').where('_o','==',me.uid);
+    q.onSnapshot(function(s){
+      s.docs.forEach(function(d){
+        var iv=(d.data()||{}).inv||{};invCache[d.id]=iv;
+        if(lastChits[d.id]){lastChits[d.id]=Object.assign({},lastChits[d.id],{inv:iv});ensureCodes(d.id,Object.assign({},lastChits[d.id],{_o:me.uid}));}
+      });
+      invsLoaded=true;if(reEmitChits)reEmitChits();
+    },function(){invsLoaded=true;});
+  }
   function noteOwned(docs){
     var now={},present={},changed=false;
     docs.forEach(function(d){
@@ -204,7 +257,10 @@
       if(v._o===undefined&&isAdmin&&!stamped[d.id]){stamped[d.id]=1;fs.collection('chits').doc(d.id).update({_o:me.uid}).catch(function(){delete stamped[d.id];});}
       if(d.metadata&&d.metadata.hasPendingWrites)return;
       now[d.id]=1;
-      lastChits[d.id]=v;ensureCodes(d.id,Object.assign({},v,{_o:me.uid}));
+      if(v.inv&&!migrating[d.id]){migrating[d.id]=1;migrateInv(d.id,v);}
+      var iv=invCache[d.id]||v.inv;
+      lastChits[d.id]=iv?Object.assign({},v,{inv:iv}):v;
+      if(iv)ensureCodes(d.id,Object.assign({},v,{_o:me.uid,inv:iv}));
     });
     Object.keys(now).forEach(function(id){if(!K.own[id]){K.own[id]=1;changed=true;}});
     Object.keys(K.own).forEach(function(id){if(!present[id]){delete K.own[id];changed=true;}});
@@ -223,6 +279,7 @@
       var seen={};all=all.filter(function(d){if(seen[d.id])return false;seen[d.id]=1;return true;});
       noteDocs(col,all);cb({docs:all.map(function(d){return wrap(d,col);})});
     }
+    if(col==='chits')reEmitChits=emit;
     function attach(key,q,own){
       var opt=own?{includeMetadataChanges:true}:{};
       subs[key]=q.onSnapshot(opt,function(s){
@@ -284,21 +341,24 @@
     if(code.length!==6)return {ok:false,why:'format'};
     var cd;try{cd=await fs.collection('codes').doc(code).get();}catch(e){return {ok:false,why:'codes-read',detail:ecode(e)};}
     if(!cd.exists)return {ok:false,why:'notfound'};
-    var cid=cd.data().cid;
-    if(K.own[cid])return {ok:true};
-    var cur=[];
-    try{var ad=await fs.collection('access').doc(me.uid).get();cur=(ad.exists&&ad.data().g)||[];}catch(e){return {ok:false,why:'access-read',detail:ecode(e)};}
-    if(cur.indexOf(cid)<0){
-      try{await fs.collection('access').doc(me.uid).set({g:cur.concat([cid]),code:code});}catch(e){return {ok:false,why:'access-write',detail:ecode(e)};}
-      cur=cur.concat([cid]);
+    var cid=cd.data().cid,mid=cd.data().mid;
+    if(K.own[cid])return {ok:true,cid:cid,mid:mid};
+    var cur=[],mm={};
+    try{var ad=await fs.collection('access').doc(me.uid).get();cur=(ad.exists&&ad.data().g)||[];mm=(ad.exists&&ad.data().mm)||{};}catch(e){return {ok:false,why:'access-read',detail:ecode(e)};}
+    /* the member map (who am I in this chit) is saved with the join. People who joined before also get it the next time they type their code. */
+    if(cur.indexOf(cid)<0||mm[cid]!==mid){
+      var mm2=Object.assign({},mm);mm2[cid]=mid;
+      try{await fs.collection('access').doc(me.uid).set({g:cur.indexOf(cid)<0?cur.concat([cid]):cur,code:code,mm:mm2});}catch(e){return {ok:false,why:'access-write',detail:ecode(e)};}
+      if(cur.indexOf(cid)<0)cur=cur.concat([cid]);
     }
     if(accessG.indexOf(cid)<0){accessG=accessG.concat([cid]);accessWait.forEach(function(f){f();});}
     for(var i=0;i<70;i++){if(K.chits[cid])break;await sleep(200);}
     if(!K.chits[cid])return {ok:false,why:'load',detail:lastLoadErr||'timeout'};
     await sleep(350);
-    return {ok:true};
+    try{var reg=JSON.parse(localStorage.getItem('km_codes')||'{}');reg[code]={cid:cid,mid:mid};localStorage.setItem('km_codes',JSON.stringify(reg));}catch(e){}
+    return {ok:true,cid:cid,mid:mid};
   }
-  window.__KMW={redeem:redeem,checkCode:checkCode,republish:function(){return republishAll(true);},owner:function(){return isAdmin;},unlocked:function(){return canMake;},isAdmin:function(){return isAdmin;},requests:function(){return reqs;},approve:function(u){return fs.collection('treasurers').doc(u).set({at:new Date().toISOString()}).then(function(){return fs.collection('requests').doc(u).update({status:'ok'}).catch(function(){});});},revoke:function(u){return fs.collection('treasurers').doc(u).delete().then(function(){return fs.collection('requests').doc(u).update({status:'denied'}).catch(function(){});});},deny:function(u){return fs.collection('requests').doc(u).update({status:'denied'});},myReq:function(){return myReq;},ask:function(){return fs.collection('requests').doc(me.uid).set({name:me.displayName||'',contact:me.email||me.phoneNumber||'',at:new Date().toISOString()});},owns:function(cid){return !!K.own[cid];},mine:function(c){return !!c&&!!me&&(c._o===me.uid||(c._o===undefined&&(!!K.own[c.id]||isAdmin)));},uid:function(){return me&&me.uid;}};
+  window.__KMW={invsLoaded:function(){return invsLoaded;},lookup:function(code){code=String(code||'').normalize('NFKC').toUpperCase().replace(/[^A-Z0-9]/g,'');try{var r=JSON.parse(localStorage.getItem('km_codes')||'{}')[code];return r?{cid:r.cid,mid:r.mid}:null;}catch(e){return null;}},redeem:redeem,checkCode:checkCode,republish:function(){return republishAll(true);},owner:function(){return isAdmin;},unlocked:function(){return canMake;},isAdmin:function(){return isAdmin;},requests:function(){return reqs;},approve:function(u){return fs.collection('treasurers').doc(u).set({at:new Date().toISOString()}).then(function(){return fs.collection('requests').doc(u).update({status:'ok'}).catch(function(){});});},revoke:function(u){return fs.collection('treasurers').doc(u).delete().then(function(){return fs.collection('requests').doc(u).update({status:'denied'}).catch(function(){});});},deny:function(u){return fs.collection('requests').doc(u).update({status:'denied'});},myReq:function(){return myReq;},ask:function(){return fs.collection('requests').doc(me.uid).set({name:me.displayName||'',contact:me.email||me.phoneNumber||'',at:new Date().toISOString()});},owns:function(cid){return !!K.own[cid];},mine:function(c){return !!c&&!!me&&(c._o===me.uid||(c._o===undefined&&(!!K.own[c.id]||isAdmin)));},uid:function(){return me&&me.uid;}};
 
   /* ---- what the app asks for ---- */
   function saveFile(o){
@@ -326,7 +386,7 @@
       if(!u){showGate('');return;}
       me=u;isAdmin=!!OWNER&&String(u.email||'').toLowerCase()===OWNER&&u.emailVerified!==false;
       hideGate();signOutBtn();
-      watchAccess();watchUnlock();
+      watchAccess();watchUnlock();watchInvs();
       readyRes(true);
     });
   }
