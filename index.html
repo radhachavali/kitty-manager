@@ -2178,6 +2178,8 @@ function skCardHtml(m,i){
   }else if(m.k==='games'){
     h=(d.games||[]).map(function(g){return '<div class="skplace"><b>'+esc(g.name)+'</b><div class="small">'+esc(g.how||'')+'</div></div>';}).join('')
      +(m.done?'<div class="pill s-ok">'+skt('done')+'</div>':'<button class="btn pri" data-act="skgames" data-id="'+i+'">'+esc(skt('usegames'))+'</button>');
+  }else if(m.k==='opts'){
+    h='<div class="row skchips">'+(d.items||[]).map(function(o,j){return '<button class="chip" data-act="skopt" data-id="'+i+'" data-w="'+j+'">'+esc(o.label)+'</button>';}).join('')+'</div>';
   }else if(m.k==='tea'){
     h='<b>☕ '+esc(skt('tea'))+'</b><div class="small">'+esc(d.nths.map(function(n){return SK_ORD[n];}).join(' + ')+' '+SK_DOW[d.wd])+'</div>'
      +(m.done?'<div class="pill s-ok">'+skt('done')+'</div>':'<button class="btn pri" data-act="skteasave" data-id="'+i+'">'+esc(skt('savetea'))+'</button>');
@@ -3584,6 +3586,28 @@ if(LITE){
      +'<div class="row" style="flex-wrap:nowrap"><a id="pgs" class="btn sm" style="flex:1;text-decoration:none;display:flex;justify-content:center;align-items:center" target="_blank" rel="noopener" href="#" data-act="pgs">🔍 Search on Google Maps</a><button class="btn sm" style="flex:1" data-act="pask">✨ Ask Sakhi</button></div>'
      +'<div class="tiny mute">On Google Maps tap Share, then Copy, and paste the link above. The place name fills in by itself. Or ask Sakhi, then tap Use this place.</div>';
   };
+  /* a short link (maps.app.goo.gl) has no name in it: open it through a public relay and read the place name */
+  var plFetch=function(url,ms){
+    var ctl=(typeof AbortController!=='undefined')?new AbortController():null,tm=setTimeout(function(){try{ctl&&ctl.abort();}catch(e){}},ms||9000);
+    return fetch(url,ctl?{signal:ctl.signal}:{}).then(function(r){clearTimeout(tm);if(!r.ok)throw new Error('http');return r.text();},function(e){clearTimeout(tm);throw e;});
+  };
+  var plClean=function(t){
+    t=String(t||'').replace(/&amp;/g,'&').replace(/&#39;/g,"'").replace(/&quot;/g,'"').replace(/\s*[-–·|]\s*Google Maps.*$/i,'').replace(/\s*[-–·|]\s*.*$/,'').replace(/\s*,.*$/,'').trim();
+    return (!t||/^google maps$/i.test(t)||/before you continue|^google$|sign in/i.test(t))?'':t.slice(0,60);
+  };
+  var plNameFrom=function(finalUrl,body){
+    if(finalUrl){var q=parsePlace(finalUrl);if(q&&q.name)return q.name;}
+    body=String(body||'');
+    var m=/<meta[^>]+property=["']og:title["'][^>]+content=["']([^"']+)/i.exec(body)||/<title[^>]*>([^<]+)/i.exec(body);
+    return m?plClean(m[1]):'';
+  };
+  var plResolve=function(u,cb){
+    var tries=[
+      function(){return plFetch('https://api.allorigins.win/get?url='+encodeURIComponent(u)).then(function(t){var j={};try{j=JSON.parse(t);}catch(e){}return plNameFrom(j.status&&j.status.url,j.contents);});},
+      function(){return plFetch('https://corsproxy.io/?'+encodeURIComponent(u)).then(function(t){return plNameFrom('',t);});}
+    ],i=0;
+    (function next(){if(i>=tries.length)return cb('');tries[i++]().then(function(n){if(n)cb(n);else next();},function(){next();});})();
+  };
   /* a link pasted (or a Maps share text) fills the link box and, when it can, the Place box */
   var plApply=function(raw,fromPlace){
     var lk=document.getElementById('pmaplink'),pl=document.getElementById('pplace');if(!lk||!pl||!S.sheet)return false;
@@ -3599,8 +3623,14 @@ if(LITE){
       else plNote('✓ Link saved. The place name you typed is kept.');
     }else{
       if(fromPlace)pl.value='';
-      plNote(pl.value.trim()?'✓ Link saved.':'✓ Link saved. Now type the place name above.');
-      if(fromPlace){try{pl.focus();}catch(e){}}
+      var tok=S.sheet.rtok=(S.sheet.rtok||0)+1;
+      plNote('Finding the place name…');
+      plResolve(u,function(nm){
+        var pl2=document.getElementById('pplace');if(!pl2||!S.sheet||S.sheet.rtok!==tok)return;
+        var c2=pl2.value.trim();
+        if(nm){if(!c2||c2===S.sheet.auto){pl2.value=nm;S.sheet.auto=nm;}plNote('✓ Link saved and place name filled in. You can change the name.');pgsRefresh();}
+        else{plNote(c2?'✓ Link saved.':'Could not find the name by itself. Type the place name above.');if(!c2){try{pl2.focus();}catch(e){}}}
+      });
     }
     pgsRefresh();return true;
   };
@@ -3657,7 +3687,7 @@ if(LITE){
     if(!canEditParty(p))return h;
     if(!p.place)h=h.replace('<span class="mute">Place not added yet</span>','<span class="mute">Place not added yet</span> <button class="btn sm" data-act="pedit">+ Add place</button>');
     var k=h.lastIndexOf('</div>');
-    return h.slice(0,k)+'<button class="btn" data-act="pedit">✏️ Edit party details</button>'+h.slice(k);
+    return h.slice(0,k)+waInvBlock(p)+'<button class="btn" data-act="pedit">✏️ Edit party details</button>'+h.slice(k);
   };
   ACT.pedit=function(){
     var p=P();if(!p||!canEditParty(p))return;
@@ -3681,6 +3711,55 @@ if(LITE){
   };
 
 
+  /* ---------- LITE fix 5: organizers and treasurers get one party box (details, calendar, WhatsApp invite, Manage); members keep Upcoming events (read only) ---------- */
+  var isOrg=function(p){return !S.ro&&!S.guest&&!!p&&canDelParty(p);};
+  var partyFinal=function(p){return !!(p&&!p.archived&&p.date&&p.time&&p.place&&p.date>=todayIn(phoneTz()));};
+  var partyInvite=function(p){return (p.tea?'☕ ':'🎉 ')+'You are invited: '+p.name+'\n'+partyLines(p).join('\n')+'\nAdd to your calendar:\n'+gcalLink(p);};
+  var waInvBtn=function(p){return '<a class="btn sm" style="text-decoration:none" target="_blank" rel="noopener" href="https://wa.me/?text='+encodeURIComponent(partyInvite(p))+'">💬 Invite on WhatsApp</a>';};
+  var waInvBlock=function(p){
+    if(!isOrg(p)||p.archived)return '';
+    if(partyFinal(p))return '<a class="btn" style="text-decoration:none;display:flex;justify-content:center;align-items:center" target="_blank" rel="noopener" href="https://wa.me/?text='+encodeURIComponent(partyInvite(p))+'">💬 Invite on WhatsApp</a>';
+    var miss=[];if(!p.time)miss.push('the time (Reschedule)');if(!p.place)miss.push('the place (Edit party details)');
+    return miss.length?'<div class="tiny mute">To invite on WhatsApp, first add '+miss.join(' and ')+'.</div>':'';
+  };
+  upcomingCard=function(){
+    var td=todayIn(phoneTz()),mv=isMemberView();
+    var ps=list('parties').filter(function(p){if(p.archived||!p.date||p.date<td||isOrg(p))return false;if(mv){var me=pme(p);return me&&pmember(p,me);}return true;}).sort(function(a,b){return (a.date+(a.time||''))<(b.date+(b.time||''))?-1:1;}).slice(0,5);
+    if(!ps.length)return '';
+    var tm=addDays(td,1);
+    return '<div class="card stack"><h3>📅 Upcoming events</h3>'+ps.map(function(p){
+      var soon=p.date<=tm;
+      return '<div class="item" style="flex-wrap:wrap;'+(soon?'background:var(--gold-soft);border-radius:12px;padding:8px':'')+'"><div class="grow"><b>'+(p.tea?'☕ ':'🎉 ')+esc(p.name)+'</b>'+(p.rsc?' <span class="pill s-later">Rescheduled</span>':'')+(soon?' <span class="pill s-wait">Soon</span>':'')+'<div class="small mute">'+esc(fmtDay(p.date))+(p.time?' · '+esc(fmtTime(p.time)):'')+(p.place?' · '+(p.maps?'<a href="'+esc(p.maps)+'" target="_blank" rel="noopener">'+esc(p.place)+'</a>':esc(p.place)):'')+'</div>'+(p.dress?'<div class="tiny mute">👗 '+esc(p.dress)+'</div>':'')+'</div><span class="row" style="gap:6px;flex-wrap:nowrap"><a class="btn sm" style="text-decoration:none" target="_blank" rel="noopener" href="'+esc(gcalLink(p))+'" aria-label="Add to calendar">📅</a><button class="btn sm" data-act="openparty" data-id="'+p.id+'">Open</button></span></div>';
+    }).join('')+'</div>';
+  };
+  var partyCard0=partyCard;
+  partyCard=function(p){
+    if(!isOrg(p))return partyCard0(p);
+    var bills=list('bills'),rs=rsvpMap(),pc=partyCalc(p,bills,rs);
+    var yes=p.members.filter(function(m){var r=rs[p.id+'_'+m.id];return r&&r.st==='yes';}).length;
+    var td=todayIn(phoneTz()),live=!p.archived&&!!p.date&&p.date>=td,soon=live&&p.date<=addDays(td,1);
+    var cal=live?'<a class="btn sm" style="text-decoration:none" target="_blank" rel="noopener" href="'+esc(gcalLink(p))+'">📅 Add to calendar</a>':'';
+    var inv=partyFinal(p)?waInvBtn(p):'';
+    var mg=manageBtn('p',p);
+    return '<div class="card tcard gc stack" style="--g:'+gcol(p.id)+';gap:8px">'
+     +'<div data-act="openparty" data-id="'+p.id+'" style="cursor:pointer;text-align:left"><div class="row between"><span class="gtag">'+(p.tea?'☕ Tea party':'🎉 Party')+(soon?' · Soon':'')+'</span><span class="pill s-info" style="background:var(--info-soft);color:var(--info)">'+esc(p.cur)+'</span></div><h3 style="margin-top:4px">'+esc(p.name)+'</h3></div>'
+     +'<div class="small">🗓️ '+esc(p.date?fmtDay(p.date):'Date not set')+(p.time?' · '+esc(fmtTime(p.time)):'')+'</div>'
+     +'<div class="small">📍 '+(p.place?(p.maps?'<a href="'+esc(p.maps)+'" target="_blank" rel="noopener">'+esc(p.place)+'</a>':esc(p.place)):'<span class="mute">Place not added yet</span>')+'</div>'
+     +(p.dress?'<div class="small">👗 '+esc(p.dress)+'</div>':'')
+     +'<div class="mute small">'+yes+' coming · <b>'+esc(fmtM(pc.total,p.cur))+'</b> spent</div>'
+     +'<div class="row" style="gap:6px;flex-wrap:wrap">'+cal+inv+'<button class="btn sm" data-act="openparty" data-id="'+p.id+'">Open</button>'+(mg?'<span style="margin-left:auto">'+mg+'</span>':'')+'</div></div>';
+  };
+  var partyAdmin0Base=partyAdmin0;
+  partyAdmin0=function(p){
+    if(S.ro||!canDelParty(p))return '';
+    if(p.archived)return partyAdmin0Base(p);
+    var td=todayIn(phoneTz()),h='<button class="btn" data-act="parch">🗄️ Archive</button>';
+    if(p.date>td)h+='<button class="btn bad" data-act="pdelnow">Delete</button>';
+    else if(p.date===td)h+='<button class="btn bad" data-act="xdel" data-k="p">Export and delete</button>';
+    else h+='<div class="small mute">This party is over. It stays in Archive and is cleaned up automatically 30 days later once everything is settled.</div>';
+    return '<div class="stack" style="gap:8px">'+h+'</div>';
+  };
+
   /* ---------- LITE fix 3: Sakhi works on the website without Claude (simple helper, no AI) ---------- */
   var skSendBase=ACT.sksendtext;
   var skPlacesIdeas=[['Cafe with private seating','Quiet corner, easy to talk'],['Garden or terrace cafe','Open air, good for daytime'],['Restaurant with a family room','Space for the whole group'],['Rooftop cafe','Nice view, check the weather'],['Community hall or clubhouse','Cheaper, bring your own snacks']];
@@ -3689,42 +3768,94 @@ if(LITE){
     SK.msgs.push({r:'c',k:'places',d:{area:area,options:skPlacesIdeas.map(function(o){return {name:o[0],why:o[1]};})}});
     skAdd('a','Tap Use this place to put an idea in your party form, or tap Check on Google Maps to look at it first.'+(budget?' Your planned total is about ₹'+budget+'.':''));
   };
+  /* --- understanding typing mistakes and plain words --- */
+  var skLev=function(a,b){
+    var m=a.length,n=b.length,d=[],i,j;if(Math.abs(m-n)>2)return 9;
+    for(i=0;i<=m;i++){d[i]=[i];}for(j=1;j<=n;j++)d[0][j]=j;
+    for(i=1;i<=m;i++)for(j=1;j<=n;j++)d[i][j]=Math.min(d[i-1][j]+1,d[i][j-1]+1,d[i-1][j-1]+(a.charAt(i-1)===b.charAt(j-1)?0:1));
+    return d[m][n];
+  };
+  var skTok=function(t){return String(t||'').toLowerCase().replace(/[^a-z0-9ऀ-෿ ]+/g,' ').split(/\s+/).filter(Boolean);};
+  var skNear=function(tok,kw){
+    if(tok===kw)return true;if(kw.length<=3)return false;
+    if(tok.indexOf(kw)===0&&tok.length<=kw.length+3)return true;
+    if(tok.charAt(0)!==kw.charAt(0))return false;
+    if(tok.length===kw.length&&tok.split('').sort().join('')===kw.split('').sort().join(''))return true;
+    return skLev(tok,kw)<=(kw.length>=7?2:1);
+  };
+  var skHas=function(toks,kws){return kws.some(function(k){return toks.some(function(t){return skNear(t,k);});});};
+  var skGameFind=function(toks,asking){
+    var best=null,bs=0;
+    SK_GAMES.forEach(function(g){
+      var gt=skTok(g[0]).filter(function(w){return w.length>=3&&w!=='the'&&w!=='and';}),hit=0,long=0;
+      gt.forEach(function(w){if(toks.some(function(t){return skNear(t,w);})){hit++;if(w.length>=4)long++;}});
+      var sc=gt.length?hit/gt.length:0;
+      if(long>=1&&sc>bs){bs=sc;best=g;}
+    });
+    return bs>=(asking?0.33:0.6)?best:null;
+  };
+  var skOpts=function(items){SK.msgs.push({r:'c',k:'opts',d:{items:items}});skList();};
+  var skMain=function(){return [{label:'Find a place',say:'find a place'},{label:'Suggest a game',say:'suggest a game'},{label:'Dress idea',say:'dress idea'},{label:'Share the party cost',say:'share the party cost'},{label:'Who hosts next?',say:'who hosts next'},{label:'Kids at the party',say:'kids at the party'}];};
+  ACT.skopt=function(t){
+    var m=SK.msgs[+t.getAttribute('data-id')],o=m&&m.d&&(m.d.items||[])[+t.getAttribute('data-w')];if(!o)return;
+    ACT.sksendtext(o.say||o.label);
+  };
   var skOffline=function(text){
     text=String(text||'').slice(0,500);if(!text)return;
     if(!SK.open)ACT.skopen();
     SK.msgs.push({r:'u',t:text});
-    var low=text.toLowerCase(),nums=skNum(text);
+    var low=text.toLowerCase(),nums=skNum(text),toks=skTok(text);
     if(SK.ask&&SK.ask.k==='area'){var b=SK.ask.budget;SK.ask=null;skList();skShowPlaces(text.trim().slice(0,40),b);return;}
     if(SK.ask&&SK.ask.k==='split'){SK.ask=null;if(nums.length>=2&&nums[1]>0){skList();skAdd('a','₹'+nums[0]+' shared between '+nums[1]+' adults is about ₹'+Math.ceil(nums[0]/nums[1])+' each. Children are not charged.');return;}}
     var bm=/budget is about\s*(\d[\d,]*)/.exec(low),budget=bm?bm[1].replace(/,/g,''):'';
-    if(/place|cafe|restaurant|venue|where/.test(low)){
+    /* greetings and thanks */
+    if(toks.length<=3&&skHas(toks,['hi','hello','hey','hii','namaste','namaskaram'])){skList();skAdd('a','Hi! I am Sakhi. What would you like help with?');skOpts(skMain());return;}
+    if(toks.length<=4&&skHas(toks,['thanks','thank','thx','shukriya','dhanyavad'])){skList();skAdd('a','You are welcome! Ask me anything else about the party.');return;}
+    /* a game by name, or how to play */
+    var asking=skHas(toks,['play','rules','rule','explain','teach','learn']);
+    var gm=skGameFind(toks,asking);
+    if(gm){skList();skAdd('a','🎲 '+gm[0]+'. '+gm[1]);skOpts([{label:'Another game',say:'suggest a game'},{label:'Dress idea',say:'dress idea'}]);return;}
+    if(asking&&skHas(toks,['play','game','games','rules','rule'])){skList();skAdd('a','Which game? Tap one and I will explain how to play.');skOpts(SK_GAMES.map(function(g){return {label:g[0],say:'how to play '+g[0]};}));return;}
+    if(skHas(toks,['place','places','cafe','restaurant','venue','where','hotel'])){
       var am=/\b(?:in|near|at|around)\s+([a-z][a-z .\-]{2,30})$/i.exec(text.replace(/[.!?]+$/,''));
       if(am&&!/ask me/.test(low)){skList();skShowPlaces(am[1].trim(),budget);return;}
       SK.ask={k:'area',budget:budget};skList();skAdd('a','Which area or locality is the party in? For example Madhapur, Kondapur or Banjara Hills.');return;
     }
-    if(/\btea\b|samosa/.test(low)){skList();ACT.skchip(null,'tea');return;}
-    if(/\bhost/.test(low)){
+    if(skHas(toks,['tea','samosa'])){skList();ACT.skchip(null,'tea');return;}
+    if(skHas(toks,['host','hosts','hosting'])){
       skList();var c=(typeof G==='function')?G():null;
       if(!c){skAdd('a','Open your chit first, then ask me again. I look at who has already hosted.');return;}
       var hosted={};list('parties').forEach(function(q){if(q.cid===c.id&&q.by)hosted[q.by]=1;});
       var left=c.members.filter(function(m){return !hosted[m.id];}).map(function(m){return m.name;});
       skAdd('a',left.length?'Not hosted yet: '+left.join(', ')+'. This is only a suggestion. The group decides.':'Everyone has hosted once. You can start a new round. The group decides who goes first.');return;
     }
-    if(/split|share|cost|bill|expense|spend/.test(low)){
+    if(skHas(toks,['split','share','cost','bill','expense','spend','divide','money'])){
       if(nums.length>=2&&nums[1]>0&&!/please explain/.test(low)){skList();skAdd('a','₹'+nums[0]+' shared between '+nums[1]+' adults is about ₹'+Math.ceil(nums[0]/nums[1])+' each. Children are not charged.');return;}
       skList();skAdd('a','The party cost is shared equally between the adults who said Yes. Children are not charged. If the spending goes over the planned budget, the extra is shared equally too. To change who is counted, update each person’s Yes or No on the party page.');
       SK.ask={k:'split'};skAdd('a','Want a quick sum? Type the total and the number of adults, for example 5000 and 8.');return;
     }
-    if(/kid|child/.test(low)){skList();skAdd('a',skt('kidsfb'));return;}
-    if(/dress|theme|colour|color/.test(low)){skList();ACT.skchip(null,'dress');return;}
-    if(/\bgames?\b|\bplay\b/.test(low)){skList();ACT.skchip(null,'game');return;}
-    if(/quote|inspir|kind word/.test(low)){skList();ACT.skchip(null,'quote');return;}
-    if(/chit/.test(low)&&/start|new|create/.test(low)){skList();ACT.skclose();ACT.newchit();return;}
-    if(/party/.test(low)){skList();ACT.skclose();ACT.newparty({getAttribute:function(){return null;}});return;}
-    skList();skAdd('a','I am a simple helper on the website. I can help with: places for a party, a dress idea, a game, a kind quote, kids at the party, sharing the party cost, who hosts next, and Tea and Samosa days. Tap one of the buttons above, or type one of these words.');
+    if(skHas(toks,['kid','kids','child','children'])){skList();skAdd('a',skt('kidsfb'));return;}
+    if(skHas(toks,['dress','theme','colour','color','outfit','saree','wear'])){skList();ACT.skchip(null,'dress');return;}
+    if(skHas(toks,['game','games','play','fun','activity','entertain'])){skList();ACT.skchip(null,'game');return;}
+    if(skHas(toks,['quote','inspire','inspiration','motivate'])||/kind word/.test(low)){skList();ACT.skchip(null,'quote');return;}
+    if(skHas(toks,['chit'])&&skHas(toks,['start','new','create','begin'])){skList();ACT.skclose();ACT.newchit();return;}
+    if(skHas(toks,['party','plan','organize','organise','event'])){skList();ACT.skclose();ACT.newparty({getAttribute:function(){return null;}});return;}
+    skList();skAdd('a','I did not understand that. Tap one of these, or type it in other words:');skOpts(skMain());
   };
+  /* no AI on the website: hide the Claude/ChatGPT switch and say what Sakhi is here */
+  var homeSakhiBox0=homeSakhiBox;
+  homeSakhiBox=function(){return homeSakhiBox0().replace(/<span class="aitog"[^>]*>.*?<\/button><\/span>/,'');};
+  SKT.ainote=['Here Sakhi is a simple helper: places, games, dress ideas, sharing the cost and who hosts next.','यहाँ सखी एक आसान सहायक है: जगह, खेल, ड्रेस आइडिया, खर्च बाँटना और अगली मेज़बान।','ఇక్కడ సఖి ఒక సులభమైన సహాయకురాలు: స్థలాలు, ఆటలు, డ్రెస్ ఐడియాలు, ఖర్చు పంచడం, తదుపరి హోస్ట్.'];
+  var skchip0=ACT.skchip;ACT.skchip=function(){SK.welcomed=true;return skchip0.apply(this,arguments);};
+  var skOpen0=ACT.skopen;
+  ACT.skopen=function(){
+    var first=!SK.msgs.length&&!SK.pre&&!SK.welcomed;SK.welcomed=true;
+    skOpen0.apply(this,arguments);
+    if(first&&!SK.msgs.length){skAdd('a','Hi! I am Sakhi, your party helper. What would you like to do?');skOpts(skMain());}
+  };
+
   ACT.sksendtext=async function(text){
-    if(SK.busy)return;
+    if(SK.busy)return;SK.welcomed=true;
     var sm=await skSample();
     if(sm)return skSendBase(text);
     skOffline(text);
