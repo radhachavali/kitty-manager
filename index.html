@@ -1,4 +1,4 @@
-<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#7a2e6e"><meta name="mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-capable" content="yes"><link rel="manifest" href="manifest.webmanifest"><link rel="icon" href="icon-192.png"><link rel="apple-touch-icon" href="icon-192.png"><title>Kitty Manager</title>
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#7a2e6e"><meta name="mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-capable" content="yes"><link rel="manifest" href="manifest.webmanifest"><link rel="icon" href="icons/icon-192.png"><link rel="apple-touch-icon" href="icons/icon-192.png"><title>Kitty Manager</title>
 <script src="firebase-config.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
@@ -536,7 +536,11 @@ function logAdd(c,kind,text,by,data){
   e.h=ledgerHash(e);
   return put('ledger',c.id+'_'+pad(seq,5)+'_'+uid().slice(0,4),e);
 }
-function myId(c){return c?ls('me:'+c.id):null;}
+function meOf(cid){var v=ls('me:'+cid);if(v)return v;
+  /* the treasurer who owns this chit is the treasurer member, even on a browser that never saved a name (new laptop, cleared data) */
+  try{var c=S.D&&S.D.chits&&S.D.chits[cid];if(c&&c.tre&&memberById({members:c.members||[]},c.tre)&&window.__KMW&&window.__KMW.mine&&window.__KMW.mine(Object.assign({id:cid},c)))return c.tre;}catch(e){}
+  return null;}
+function myId(c){return c?meOf(c.id):null;}
 /* hooks the website overrides (two roles on Home) */
 function homeTabs(){return '';}
 function homeShowCode(){return true;}
@@ -953,7 +957,7 @@ function joinCard(c,m){
   return '<div class="card stack" style="border:2px solid var(--accent)"><h3>Welcome, '+esc(m.name)+'</h3><div class="small mute">Please read the rules. When you tap I agree and join, your name is signed in with the time.</div><div class="stack" style="gap:6px">'+agreementText(c).map(function(l){return '<div class="small">\u2022 '+esc(l)+'</div>';}).join('')+'</div><button class="go" data-act="agree">I agree and join</button></div>';
 }
 /* ===== Kitty Manager: party + wizard views ===== */
-function pme(p){return ls('mep:'+p.id)||(p.cid?ls('me:'+p.cid):null);}
+function pme(p){return ls('mep:'+p.id)||(p.cid?meOf(p.cid):null);}
 function pmember(p,id){for(var i=0;i<p.members.length;i++)if(p.members[i].id===id)return p.members[i];return null;}
 function pname(p,id){var m=pmember(p,id);return m?m.name:'Someone';}
 
@@ -1100,7 +1104,7 @@ function photosCard(p){
 function canDelParty(p){
   if(S.owner||S.mode==='local')return true;
   var c=p.cid?S.D.chits[p.cid]:null;
-  if(c&&ls('me:'+p.cid)===c.tre)return true;
+  if(c&&meOf(p.cid)===c.tre)return true;
   if(!p.by)return !!S.owner||S.mode==='local';
   return pme(p)===p.by||!!S.owner&&S.mode==='local';
 }
@@ -1650,7 +1654,7 @@ ACT.psave=function(){
   if(val('pkids')==='')return serr('Choose whether kids are allowed.');
   if(!/^\d{4}-\d{2}-\d{2}$/.test(date))return serr('Choose the date.');
   var members=[],meId=null;
-  if(c){members=c.members.map(function(m){return {id:m.id,name:m.name};});meId=ls('me:'+s.cid);}
+  if(c){members=c.members.map(function(m){return {id:m.id,name:m.name};});meId=meOf(s.cid);}
   else{
     var my=val('pmy').trim();if(!my)return serr('Type your name.');
     var others=val('pothers').split(/\n|,/).map(function(x){return x.trim();}).filter(Boolean);
@@ -1919,7 +1923,7 @@ ACT.phview=function(t,id){var p=P();if(!p)return;var l=photosList(p.id);for(var 
 ACT.phnav=function(t){phSheet((S.ph?S.ph.i:0)+(+t.getAttribute('data-d')));};
 ACT.phdel=function(){
   var p=P();if(!p||!S.ph)return;var x=S.D.pphotos[S.ph.id];if(!x)return;
-  if(x.by&&x.by!==pme(p)&&!(p.cid&&S.D.chits[p.cid]&&ls('me:'+p.cid)===S.D.chits[p.cid].tre)){toast('Only the person who added it, or the treasurer, can remove a photo.','warn');return;}
+  if(x.by&&x.by!==pme(p)&&!(p.cid&&S.D.chits[p.cid]&&meOf(p.cid)===S.D.chits[p.cid].tre)){toast('Only the person who added it, or the treasurer, can remove a photo.','warn');return;}
   put('pphotos',S.ph.id,null);closeSheet();toast('Removed');
 };
 ACT.phshare=function(){
@@ -2521,7 +2525,7 @@ function chMsgs(gid){return list('msgs').filter(function(m){return m.gid===gid;}
 function chCv(a,b){return [a,b].sort().join('_');}
 function chDms(gid,a,b){var k=chCv(a,b);return list('dms').filter(function(m){return m.gid===gid&&m.cv===k;}).sort(function(x,y){return x.at<y.at?-1:x.at>y.at?1:0;});}
 function chCtx(gid,kind){
-  if(kind==='c'){var c=S.D.chits[gid];if(!c)return null;return {kind:'c',gid:gid,name:c.name+' '+c.year,members:c.members,tre:c.tre,me:ls('me:'+gid)};}
+  if(kind==='c'){var c=S.D.chits[gid];if(!c)return null;return {kind:'c',gid:gid,name:c.name+' '+c.year,members:c.members,tre:c.tre,me:meOf(gid)};}
   var p=S.D.parties[gid];if(!p)return null;
   return {kind:'p',gid:gid,name:p.name,members:p.members,tre:p.by||(p.cid&&S.D.chits[p.cid]?S.D.chits[p.cid].tre:null),me:pme(Object.assign({id:gid},p))};
 }
