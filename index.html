@@ -81,6 +81,7 @@ label.f{display:flex;flex-direction:column;gap:6px;font-size:16px;font-weight:80
 .tab{flex:0 0 auto;border:0;background:var(--card);border:1.5px solid var(--line);border-radius:999px;padding:10px 18px;font-weight:800;font-size:16px;min-height:44px}
 .tab.on{background:var(--accent);color:var(--accent-fg);border-color:var(--accent)}
 .tcard{width:100%;text-align:left;display:block}
+.dsk{display:none}
 .sakhi{display:flex;gap:12px;align-items:flex-start;background:var(--accent-soft);border-radius:18px;padding:12px 14px}
 .sakhi svg{flex:0 0 46px}
 .sakhi p{margin:0;font-size:16px;font-weight:700}
@@ -153,7 +154,13 @@ html body{max-width:none;padding:20px 32px 60px}
 /* smooth on desktop: stop endless animations */
 .skhome,.skhome b:first-child{animation:none!important}
 /* home */
-#root>.stack:has(>.htabs){display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;align-items:start}
+#root>.stack:has(>.htabs){display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;align-items:stretch}
+#root>.stack:has(>.htabs)>.tcard{display:flex;flex-direction:column;height:100%}
+#root>.stack:has(>.htabs)>.tcard>:last-child:not(:first-child){margin-top:auto!important;padding-top:10px}
+#root>.stack:has(>.htabs)>.tcard .btn{min-height:40px;padding:6px 12px;font-size:15px;border-radius:12px}
+#root>.stack:has(>.htabs)>.tcard .row{gap:8px}
+#root>.stack:has(>.htabs)>h2.dsk{display:block;grid-column:1/-1;margin:10px 0 0;padding-bottom:6px;border-bottom:1px solid var(--line,#e6dcd2)}
+#root>.stack:has(>.htabs)>:is(.btngrid,.btn,.row,details){align-self:start}
 #root>.stack:has(>.htabs)>:is(.brand,.htabs,.skhome,.small.mute,.card.stack:not(.tcard)){grid-column:1/-1}
 #root>.stack:has(>.htabs)>.row.between:first-child{position:absolute;top:22px;right:32px}
 #root>.stack:has(>.htabs)>.btngrid{grid-column:1/-1;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
@@ -668,7 +675,7 @@ function viewHome(){
     h+='<div class="btngrid">'+(S.owner?'<button class="btn pri" data-act="newchit">+ New chit</button>':'')+'<button class="btn pri" data-act="newparty">🎉 Organize party</button><button class="btn wide" data-act="teahome">☕ Tea &amp; Samosa party</button></div>';
   }
   if(S.mode!=='local'&&homeShowCode())h+='<button class="btn" data-act="homecode">I have an invite code</button>';
-  var act=chits.filter(function(c){return chitBucket(c)==='active';}),oldc=chits.filter(function(c){return chitBucket(c)==='archive';}),donec=chits.filter(function(c){return chitBucket(c)==='completed';});
+  var act=chits.filter(function(c){return chitBucket(c)==='active';}).sort(function(a,b){var r=function(c){return c.status==='running'?0:c.status==='draft'?1:2;};return r(a)-r(b);}),oldc=chits.filter(function(c){return chitBucket(c)==='archive';}),donec=chits.filter(function(c){return chitBucket(c)==='completed';});
   if(!S.guest)h+=festCard()+thoughtCard()+chatsBtn();
   if(!S.ro&&!S.guest)h+=upcomingCard();
   var chitCard=function(c,graph){
@@ -679,7 +686,7 @@ function viewHome(){
   if(S.guest)h+='<div class="card stack"><h3>Sign in to see the chits</h3><div class="small mute">This page could not open the group\'s shared books. Please sign in to Claude with the account your treasurer shared this with, then open the link again. Only the treasurer can start a new chit.</div></div>';
   else if(!S.loaded&&S.db)h+='<div class="card mute">Loading…</div>';
   else if(!chits.length)h+=sakhi(mv?'Hello! I am Sakhi. Your treasurer will send you a join code on WhatsApp. Tap <b>I have an invite code</b> and type it to see your chit.':S.owner||!S.guest&&S.mode==='local'?'Hello! I am Sakhi. Tap <b>+ New chit</b> to start your group. We will set the rules, draw the winners fairly, and keep every payment clear.':'Hello! I am Sakhi. Your treasurer will send you a join code on WhatsApp. Tap <b>I have an invite code</b> and type it to see your chit.');
-  else h+=act.map(function(c){return chitCard(c,true);}).join('');
+  else h+=(!mv&&act.length?'<h2 class="dsk">Chits</h2>':'')+act.map(function(c){return chitCard(c,true);}).join('');
   if(mv){
     act.forEach(function(c){
       var me=myId(c);if(c.status!=='running'||!me)return;
@@ -691,7 +698,7 @@ function viewHome(){
   if(mv)parties=parties.filter(function(p){var me=pme(p);return me&&pmember(p,me);});
   var up=parties.filter(function(p){return partyBucket(p)==='active';}).reverse(),oldp=parties.filter(function(p){return partyBucket(p)==='archive';});
   if(mv&&up.length)h+='<h2>My parties</h2>';
-  h+=up.map(partyCard).join('');
+  h+=(!mv&&up.length?'<h2 class="dsk">Parties</h2>':'')+up.map(partyCard).join('');
   if(!up.length&&chits.length&&!mv)h+='<div class="card mute small">No upcoming parties. Tap Organize party or Tea &amp; Samosa above.</div>';
   if(oldc.length||oldp.length)h+='<details class="oldsec"><summary>\uD83D\uDDC4\uFE0F Archive ('+(oldc.length+oldp.length)+')</summary><div class="stack">'+oldc.map(function(c){return chitCard(c,false);}).join('')+oldp.map(partyCard).join('')+'</div></details>';
   if(donec.length)h+='<details class="oldsec"><summary>\u2705 Completed ('+donec.length+')</summary><div class="stack">'+donec.map(function(c){return chitCard(c,false);}).join('')+'</div></details>';
@@ -713,7 +720,7 @@ function viewChit(c){
   h+='<div><div class="row between"><h1>'+esc(c.name)+' '+esc(c.year)+'</h1>'+'<div class="row" style="gap:6px">'+invBtn(c)+manageBtn('c',c)+'</div></div><div class="mute small">'+esc(wordOf(c))+' · '+esc(c.cur)+' · '+c.members.length+' members · '+(c.status==='draft'?'Setting up':c.status==='closed'?'Closed':'Running')+roleTag(c)+'</div></div>';
   if(me&&memberById(c,me))h+=chBigBtn('c',c.id,ct('chat'));
   if(S.tab==='month')h+=festCard()+thoughtCard();
-  if(!me||!memberById(c,me)){
+  if((!me||!memberById(c,me))&&!(S.owner&&S.mode!=='local')){
     if(c.inv){
       h+='<div class="card stack"><h3>Join with your code</h3><div class="small mute">The treasurer sent you a 6-character code on WhatsApp. Type it to see your own page.</div><input id="jcode" maxlength="9" autocapitalize="characters" autocomplete="off" placeholder="for example K7M2QX"><div id="jerr"></div><button class="go" data-act="jcodego">Join</button></div></div>';
     }else{
@@ -4073,7 +4080,7 @@ if(window.__KMW){
      +'</div>'+(role==='in'&&!n.own?'<div class="notice info small">Want to run your own chit? Tap <b>Treasurer</b>.</div>':'');
   };
   homeShowCode=function(){return (CTX_ROLE||homeTab())==='in';};
-  roleTag=function(c){var m=mineChit(c);return '<div class="tiny"><span class="pill '+(m?'s-ready':'s-info')+'">'+(m?'You are the treasurer':'You are a member')+'</span></div>';};
+  roleTag=function(c){var m=mineChit(c);return '<div class="tiny"><span class="pill '+(m?'s-ready':'s-info')+'">'+(m?'You are the treasurer':'You are a member')+'</span> <span class="tiny mute">v26</span></div>';};
   ACT.htab=function(t,id){try{localStorage.setItem('km_home_tab',id==='in'?'in':id==='req'?'req':'run');}catch(e){}render(true);};
   var _vh=viewHome;
   viewHome=function(){
