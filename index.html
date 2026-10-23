@@ -601,6 +601,7 @@ function render(force){
   setTimeout(run,60);
 }
 function doRender(force){
+  if(window.__langOpen&&Date.now()-window.__langOpen<20000){setTimeout(function(){render(force);},700);return;}
   if(S.view==='wiz'&&!force)return;
   var root=$('#root');if(!root)return;
   if(typeof tryPending==='function')tryPending();
@@ -614,11 +615,23 @@ function doRender(force){
   skFab();if(typeof chRefresh==='function')chRefresh();
   applyLang();
 }
+/* countries: the country decides which languages are offered. Edit the l:[...] lists here to change that. */
+var COUNTRIES=[
+  {c:'IN',n:'India',f:'\uD83C\uDDEE\uD83C\uDDF3',l:['en','hi','te']},
+  {c:'US',n:'USA',f:'\uD83C\uDDFA\uD83C\uDDF8',l:['en']},
+  {c:'GB',n:'UK',f:'\uD83C\uDDEC\uD83C\uDDE7',l:['en']},
+  {c:'AE',n:'UAE & Gulf',f:'\uD83C\uDDE6\uD83C\uDDEA',l:['en']},
+  {c:'SG',n:'Singapore',f:'\uD83C\uDDF8\uD83C\uDDEC',l:['en']},
+  {c:'AU',n:'Australia',f:'\uD83C\uDDE6\uD83C\uDDFA',l:['en']},
+  {c:'CA',n:'Canada',f:'\uD83C\uDDE8\uD83C\uDDE6',l:['en']}];
+function countryOf(){var k=S.country||'IN';for(var i=0;i<COUNTRIES.length;i++)if(COUNTRIES[i].c===k)return COUNTRIES[i];return COUNTRIES[0];}
 function topBar(back,title){
   var tag=S.mode==='live'?'<span class="pill s-ok">Live and shared</span>':S.mode==='view'?'<span class="pill s-later">View only</span>':S.mode==='error'?'<span class="pill s-late">Connection problem</span>':'<span class="pill s-wait">'+(S.guest?'Not signed in':window.claude?'Preview: not shared':'Saved on this phone')+'</span>';
-  var sel='<select id="langSel" class="langsel" data-act="lang" aria-label="Language"><option value="en"'+(S.lang==='en'?' selected':'')+'>English</option><option value="hi"'+(S.lang==='hi'?' selected':'')+'>हिन्दी</option><option value="te"'+(S.lang==='te'?' selected':'')+'>తెలుగు</option></select>';
+  var cc=countryOf(),ls_=cc.l,cs='<select id="cSel" class="langsel" data-act="country" aria-label="Country">'+COUNTRIES.map(function(x){return '<option value="'+x.c+'"'+(x.c===cc.c?' selected':'')+'>'+x.f+' '+x.n+'</option>';}).join('')+'</select>';
+  var LN={en:'English',hi:'\u0939\u093f\u0928\u094d\u0926\u0940',te:'\u0c24\u0c46\u0c32\u0c41\u0c17\u0c41'};
+  var sel=cs+(ls_.length>1?'<select id="langSel" class="langsel" data-act="lang" aria-label="Language">'+ls_.map(function(k){return '<option value="'+k+'"'+(S.lang===k?' selected':'')+'>'+LN[k]+'</option>';}).join('')+'</select>':'');
   var th='<button class="btn sm themebtn" data-act="theme" aria-label="Dark or light mode" title="Dark or light mode">'+(curTheme()==='dark'?'\u2600\uFE0F':'\uD83C\uDF19')+'</button>';
-  return '<div class="row between">'+(back?'<button class="btn sm" data-act="home">← Back</button>':'<span></span>')+'<span class="row" style="gap:8px">'+tag+th+sel+'</span></div>';
+  return '<div class="row between">'+(back?'<button class="btn sm" data-act="home">← Back</button>':'<span></span>')+'<span class="row" style="gap:8px;flex-wrap:wrap;justify-content:flex-end">'+tag+th+sel+'</span></div>';
 }
 function banner(){
   var h='';
@@ -1165,6 +1178,10 @@ window.addEventListener('popstate',function(e){
 });
 function me2(c){return iAm(c);}
 
+/* language list open: hold off re-drawing so the phone list is not closed under the finger */
+document.addEventListener('pointerdown',function(e){var t=e.target;if(t&&(t.id==='langSel'||t.id==='cSel'))window.__langOpen=Date.now();},true);
+document.addEventListener('focusin',function(e){var t=e.target;if(t&&(t.id==='langSel'||t.id==='cSel'))window.__langOpen=Date.now();});
+document.addEventListener('focusout',function(e){var t=e.target;if(t&&(t.id==='langSel'||t.id==='cSel'))setTimeout(function(){window.__langOpen=0;},400);});
 /* ---------- click router ---------- */
 document.addEventListener('click',function(e){
   var bg=e.target.classList&&e.target.classList.contains('sheetbg');if(bg){closeSheet();return;}
@@ -1196,7 +1213,8 @@ document.addEventListener('input',function(e){
 document.addEventListener('change',function(e){
   var t=e.target;if(!t.getAttribute)return;
   var a=t.getAttribute('data-act'),w=t.getAttribute('data-w');
-  if(a==='lang'){S.lang=t.value;ls('lang',S.lang);render(true);return;}
+  if(a==='country'){window.__langOpen=0;S.country=t.value;ls('country',S.country);var cl=countryOf().l;if(cl.indexOf(S.lang)<0){S.lang='en';ls('lang','en');}render(true);return;}
+  if(a==='lang'){window.__langOpen=0;S.lang=t.value;ls('lang',S.lang);render(true);return;}
   if(w&&S.wiz){S.wiz[w]=t.value;if(w==='tre'){if(S.wiz.cos===t.value)S.wiz.cos='';render(true);}if(w==='cur'||w==='due'||w==='grace'||w==='payDay')wizLive();}
   if(t.id==='bcat')S.bill&&(S.bill.manual=true);
   if(t.id==='bcur')billCurChange();
@@ -2048,7 +2066,7 @@ function applyLang(root){
 
 /* ================= start ================= */
 async function boot(){
-  S.lang=ls('lang')||'en';
+  S.lang=ls('lang')||'en';S.country=ls('country')||'IN';
   try{history.replaceState({v:'home'},'');}catch(e){}
   var cdb=null;try{cdb=JSON.parse(ls('cdb')||'null');}catch(e){}
   var db=null,user=null;
@@ -4080,7 +4098,7 @@ if(window.__KMW){
      +'</div>'+(role==='in'&&!n.own?'<div class="notice info small">Want to run your own chit? Tap <b>Treasurer</b>.</div>':'');
   };
   homeShowCode=function(){return (CTX_ROLE||homeTab())==='in';};
-  roleTag=function(c){var m=mineChit(c);return '<div class="tiny"><span class="pill '+(m?'s-ready':'s-info')+'">'+(m?'You are the treasurer':'You are a member')+'</span> <span class="tiny mute">v26</span></div>';};
+  roleTag=function(c){var m=mineChit(c);return '<div class="tiny"><span class="pill '+(m?'s-ready':'s-info')+'">'+(m?'You are the treasurer':'You are a member')+'</span> <span class="tiny mute">v27</span></div>';};
   ACT.htab=function(t,id){try{localStorage.setItem('km_home_tab',id==='in'?'in':id==='req'?'req':'run');}catch(e){}render(true);};
   var _vh=viewHome;
   viewHome=function(){
