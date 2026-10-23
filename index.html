@@ -617,18 +617,19 @@ function doRender(force){
 }
 /* countries: the country decides which languages are offered. Edit the l:[...] lists here to change that. */
 var COUNTRIES=[
-  {c:'IN',n:'India',f:'\uD83C\uDDEE\uD83C\uDDF3',l:['en','hi','te']},
-  {c:'US',n:'USA',f:'\uD83C\uDDFA\uD83C\uDDF8',l:['en']},
-  {c:'GB',n:'UK',f:'\uD83C\uDDEC\uD83C\uDDE7',l:['en']},
-  {c:'AE',n:'UAE & Gulf',f:'\uD83C\uDDE6\uD83C\uDDEA',l:['en']},
-  {c:'SG',n:'Singapore',f:'\uD83C\uDDF8\uD83C\uDDEC',l:['en']},
-  {c:'AU',n:'Australia',f:'\uD83C\uDDE6\uD83C\uDDFA',l:['en']},
-  {c:'CA',n:'Canada',f:'\uD83C\uDDE8\uD83C\uDDE6',l:['en']}];
+  {c:'IN',n:'India',f:'\uD83C\uDDEE\uD83C\uDDF3',d:'en',l:['en','hi','te','ta']},
+  {c:'US',n:'USA',f:'\uD83C\uDDFA\uD83C\uDDF8',d:'en',l:['en','hi','te']},
+  {c:'GB',n:'UK',f:'\uD83C\uDDEC\uD83C\uDDE7',d:'en',l:['en','hi','te']},
+  {c:'AE',n:'UAE & Gulf',f:'\uD83C\uDDE6\uD83C\uDDEA',d:'en',l:['en','ar','hi','te']},
+  {c:'SG',n:'Singapore',f:'\uD83C\uDDF8\uD83C\uDDEC',d:'en',l:['en','zh','ms','ta','hi','te']},
+  {c:'CN',n:'China',f:'\uD83C\uDDE8\uD83C\uDDF3',d:'zh',l:['zh','en','hi','te']},
+  {c:'AU',n:'Australia',f:'\uD83C\uDDE6\uD83C\uDDFA',d:'en',l:['en','hi','te']},
+  {c:'CA',n:'Canada',f:'\uD83C\uDDE8\uD83C\uDDE6',d:'en',l:['en','hi','te']}];
 function countryOf(){var k=S.country||'IN';for(var i=0;i<COUNTRIES.length;i++)if(COUNTRIES[i].c===k)return COUNTRIES[i];return COUNTRIES[0];}
 function topBar(back,title){
   var tag=S.mode==='live'?'<span class="pill s-ok">Live and shared</span>':S.mode==='view'?'<span class="pill s-later">View only</span>':S.mode==='error'?'<span class="pill s-late">Connection problem</span>':'<span class="pill s-wait">'+(S.guest?'Not signed in':window.claude?'Preview: not shared':'Saved on this phone')+'</span>';
   var cc=countryOf(),ls_=cc.l,cs='<select id="cSel" class="langsel" data-act="country" aria-label="Country">'+COUNTRIES.map(function(x){return '<option value="'+x.c+'"'+(x.c===cc.c?' selected':'')+'>'+x.f+' '+x.n+'</option>';}).join('')+'</select>';
-  var LN={en:'English',hi:'\u0939\u093f\u0928\u094d\u0926\u0940',te:'\u0c24\u0c46\u0c32\u0c41\u0c17\u0c41'};
+  var LN={en:'English',hi:'\u0939\u093f\u0928\u094d\u0926\u0940',te:'\u0c24\u0c46\u0c32\u0c41\u0c17\u0c41',zh:'\u4e2d\u6587',ar:'\u0627\u0644\u0639\u0631\u0628\u064a\u0629',ms:'Bahasa Melayu',ta:'\u0ba4\u0bae\u0bbf\u0bb4\u0bcd'};
   var sel=cs+(ls_.length>1?'<select id="langSel" class="langsel" data-act="lang" aria-label="Language">'+ls_.map(function(k){return '<option value="'+k+'"'+(S.lang===k?' selected':'')+'>'+LN[k]+'</option>';}).join('')+'</select>':'');
   var th='<button class="btn sm themebtn" data-act="theme" aria-label="Dark or light mode" title="Dark or light mode">'+(curTheme()==='dark'?'\u2600\uFE0F':'\uD83C\uDF19')+'</button>';
   return '<div class="row between">'+(back?'<button class="btn sm" data-act="home">← Back</button>':'<span></span>')+'<span class="row" style="gap:8px;flex-wrap:wrap;justify-content:flex-end">'+tag+th+sel+'</span></div>';
@@ -1213,7 +1214,7 @@ document.addEventListener('input',function(e){
 document.addEventListener('change',function(e){
   var t=e.target;if(!t.getAttribute)return;
   var a=t.getAttribute('data-act'),w=t.getAttribute('data-w');
-  if(a==='country'){window.__langOpen=0;S.country=t.value;ls('country',S.country);var cl=countryOf().l;if(cl.indexOf(S.lang)<0){S.lang='en';ls('lang','en');}render(true);return;}
+  if(a==='country'){window.__langOpen=0;S.country=t.value;ls('country',S.country);var cc2=countryOf();if(cc2.l.indexOf(S.lang)<0){S.lang=cc2.d;ls('lang',S.lang);}render(true);return;}
   if(a==='lang'){window.__langOpen=0;S.lang=t.value;ls('lang',S.lang);render(true);return;}
   if(w&&S.wiz){S.wiz[w]=t.value;if(w==='tre'){if(S.wiz.cos===t.value)S.wiz.cos='';render(true);}if(w==='cur'||w==='due'||w==='grace'||w==='payDay')wizLive();}
   if(t.id==='bcat')S.bill&&(S.bill.manual=true);
@@ -2048,7 +2049,7 @@ var T=[
 T.forEach(function(r){D.hi[r[0]]=r[1];D.te[r[0]]=r[2];});
 })();
 function applyLang(root){
-  root=root||document.body;var d=D[S.lang];if(!d||S.lang==='en')return;
+  setDir();root=root||document.body;var d=D[S.lang];if(!d||S.lang==='en')return;
   var roots=root===document.body?[$('#root'),$('#sheet')]:[root];
   roots.forEach(function(r){
     if(!r)return;
@@ -2066,7 +2067,7 @@ function applyLang(root){
 
 /* ================= start ================= */
 async function boot(){
-  S.lang=ls('lang')||'en';S.country=ls('country')||'IN';
+  S.lang=ls('lang')||'en';S.country=ls('country')||'IN';if(countryOf().l.indexOf(S.lang)<0){S.lang=countryOf().d;}
   try{history.replaceState({v:'home'},'');}catch(e){}
   var cdb=null;try{cdb=JSON.parse(ls('cdb')||'null');}catch(e){}
   var db=null,user=null;
@@ -2181,7 +2182,7 @@ var SKT={
 };
 /* the Hindi and Telugu 'denied' and 'kidsfb' rows were typed in swapped order above, so fix them here */
 (function(){var d=SKT.denied,k=SKT.kidsfb;SKT.denied=[d[0],d[2],d[1]];SKT.kidsfb=[k[0],k[2],k[1]];})();
-function skt(k){var i=S.lang==='hi'?1:S.lang==='te'?2:0;var r=SKT[k];return r?r[i]:k;}
+function skt(k){var i=LI[S.lang]||0;var r=SKT[k];return r?(r[i]||r[0]):k;}
 
 var SK_THEMES=['White and gold','Traditional silk saree','Diwali colours','Pastel pink and mint','Retro Bollywood','Wear your mother’s saree','Red and black','Sunshine yellow','Denim and white','Blue and silver','Floral prints','Ikat prints','Bandhani colours','Kanjivaram and temple jewellery','Chikankari whites','Block prints','Green and gold','Peacock colours','One colour, head to toe','Rainbow','Animal prints','Polka dots','Stripes','Boho style','Pattu and pearls','Hats and sunglasses','Vintage 70s','Disco glam','Garden party pastels','Maroon and cream','Mustard and grey','Orange and white','Lavender dreams','Beach whites','Bollywood heroine','Cotton and handloom','Black and gold','Teal and coral','Pink and grey','Jewel tones'];
 var SK_GAMES=[
@@ -2232,7 +2233,7 @@ function skNextTea(rule,today){
 }
 function skQuote(){
   var t=todayIn(phoneTz()),w=Math.floor(toDays(t)/7);
-  var q=SK_QUOTES[w%SK_QUOTES.length];return q[S.lang==='hi'?1:S.lang==='te'?2:0];
+  var q=SK_QUOTES[w%SK_QUOTES.length];return q[LI[S.lang]||0]||q[0];
 }
 /* the home-page strip: a tip of the week and the next Tea and Samosa day */
 function skBanner(noq){
@@ -2349,7 +2350,7 @@ ACT.skchip=function(t,k){
     SK.msgs.push({r:'c',k:'games',d:{games:pick.map(function(g){return {name:g[0],how:g[1]};})}});skList();return;
   }
   if(k==='quote'){
-    var q=SK_QUOTES[Math.floor(Math.random()*SK_QUOTES.length)];SK.msgs.push({r:'a',t:'“'+q[S.lang==='hi'?1:S.lang==='te'?2:0]+'”'});skList();return;
+    var q=SK_QUOTES[Math.floor(Math.random()*SK_QUOTES.length)];SK.msgs.push({r:'a',t:'“'+(q[LI[S.lang]||0]||q[0])+'”'});skList();return;
   }
   if(k==='chit'||k==='party'){ACT.skfstart(k);return;}
   if(k==='tea'){var cs=list('chits').sort(function(a,b){return (a.created||0)-(b.created||0);});if(!cs.length){toast('Start a chit first.','warn');return;}ACT.skclose();S.tab='tea';S.mon=null;go('chit',{cid:cs[0].id});return;}
@@ -2374,7 +2375,7 @@ async function skSample(){
   return r;
 }
 function skRules(){
-  var today=todayIn(phoneTz()),L=S.lang==='hi'?'Hindi':S.lang==='te'?'Telugu':'English';
+  var today=todayIn(phoneTz()),L=LNAME[S.lang]||'English';
   var chits=list('chits').map(function(c){return c.name+' '+c.year+' ('+(c.members||[]).length+' members, '+c.status+', id '+c.id+')';}).join('; ')||'none yet';
   var parties=list('parties').map(function(p){return p.name+' on '+p.date+(p.place?' at '+p.place:'')+' (id '+p.id+')';}).join('; ')||'none yet';
   var used=skUsedThemes().map(function(x){return x.t;}).join(', ')||'none yet';
@@ -2540,7 +2541,7 @@ var CT={
  reptoast:['Reported. The treasurer can remove it.','रिपोर्ट हो गया। कोषाध्यक्ष इसे हटा सकती हैं।','రిపోర్ట్ చేయబడింది. ట్రెజరర్ దీన్ని తొలగించవచ్చు.'],
  msgsakhi:['Message','संदेश','సందేశం'],
 };
-function ct(k){var i=S.lang==='hi'?1:S.lang==='te'?2:0;var r=CT[k];return r?(r[i]||r[0]):k;}
+function ct(k){var i=LI[S.lang]||0;var r=CT[k];return r?(r[i]||r[0]):k;}
 var CH_GREET='Hello everyone! I am Sakhi, the group’s AI helper. May I stay in this chat to help with dates, reminders, places and games? I keep no copy or memory of your chat. Your messages stay only in this group’s chat. When someone calls me with @Sakhi, I follow the conversation for the next 30 minutes and answer when it helps; during that time new messages are sent to Claude. After that I wait until I am called again. Write “stop Sakhi” any time and I will leave. The treasurer or host can tap Yes or No above.\n\n'
  +'नमस्ते सभी को! मैं सखी हूँ, इस ग्रुप की AI सहायिका। क्या मैं तारीख़ों, रिमाइंडर, जगहों और खेलों में मदद के लिए इस चैट में रह सकती हूँ? मैं आपकी चैट की कोई कॉपी या याद नहीं रखती। संदेश सिर्फ़ इस ग्रुप की चैट में रहते हैं। कोई @Sakhi लिखकर बुलाए तो मैं अगले 30 मिनट बातचीत में साथ रहती हूँ और काम की बात पर जवाब देती हूँ; इस दौरान नए संदेश Claude को भेजे जाते हैं। फिर बुलाए जाने तक इंतज़ार करती हूँ। “stop Sakhi” लिखिए, मैं चली जाऊँगी।\n\n'
  +'అందరికీ నమస్తే! నేను సఖిని, ఈ గ్రూప్ AI సహాయకులిని. తేదీలు, రిమైండర్లు, ప్రదేశాలు, ఆటల్లో సహాయం చేయడానికి నేను ఈ చాట్‌లో ఉండవచ్చా? మీ చాట్ కాపీ గానీ జ్ఞాపకం గానీ నేను ఉంచుకోను. సందేశాలు ఈ గ్రూప్ చాట్‌లోనే ఉంటాయి. ఎవరైనా @Sakhi అని పిలిస్తే తర్వాతి 30 నిమిషాలు సంభాషణలో ఉండి అవసరమైనప్పుడు సమాధానం ఇస్తాను; ఆ సమయంలో కొత్త సందేశాలు Claudeకు పంపబడతాయి. ఆ తర్వాత మళ్లీ పిలిచే వరకు వేచి ఉంటాను. “stop Sakhi” అని రాస్తే నేను వెళ్లిపోతాను.';
@@ -2757,7 +2758,7 @@ var FT={
  onlytre:['The treasurer chooses the days.','दिन कोषाध्यक्ष तय करती हैं।','రోజులను ట్రెజరర్ ఎంచుకుంటారు.'],
  near:['Search near me on Google Maps','Google Maps पर मेरे पास खोजें','Google Mapsలో నా దగ్గర వెతకండి']
 };
-function ft(k){var i=S.lang==='hi'?1:S.lang==='te'?2:0;var r=FT[k];return r?(r[i]||r[0]):k;}
+function ft(k){var i=LI[S.lang]||0;var r=FT[k];return r?(r[i]||r[0]):k;}
 function nextDow(today,dow){for(var i=1;i<=7;i++){var d=addDays(today,i);if(new Date(d+'T00:00:00Z').getUTCDay()===dow)return d;}return addDays(today,7);}
 
 /* ---------- the guided flow card inside Sakhi's window ---------- */
@@ -3668,6 +3669,1226 @@ ACT.skuse=function(t,id){
   chPostSakhi(p.id,'use_'+w+'_'+Date.now().toString(36),'✅ '+(w==='place'?'Place set: '+n.place:'Dress code set: '+n.dress));
   toast('Saved');
 };
+/* ================= more languages: Chinese, Arabic, Malay, Tamil =================
+   Each entry: English text -> [Chinese, Arabic, Malay, Tamil]. Added to the Hindi/Telugu tables at start-up.
+   These were written by Claude. Please have a native speaker check them before wide use. */
+var LI={en:0,hi:1,te:2,zh:3,ar:4,ms:5,ta:6};
+var LNAME={en:'English',hi:'Hindi',te:'Telugu',zh:'Chinese',ar:'Arabic',ms:'Malay',ta:'Tamil'};
+var LX={
+"Photos": [
+"照片",
+"الصور",
+"Foto",
+"புகைப்படங்கள்"
+],
+"Add photos": [
+"添加照片",
+"إضافة صور",
+"Tambah foto",
+"புகைப்படங்களைச் சேர்"
+],
+"Share": [
+"分享",
+"مشاركة",
+"Kongsi",
+"பகிர்"
+],
+"I agree and join": [
+"我同意并加入",
+"أوافق وأنضم",
+"Saya setuju dan sertai",
+"ஒப்புக்கொண்டு சேர்கிறேன்"
+],
+"I have an invite code": [
+"我有邀请码",
+"لدي رمز دعوة",
+"Saya ada kod jemputan",
+"என்னிடம் அழைப்புக் குறியீடு உள்ளது"
+],
+"Send invites": [
+"发送邀请",
+"إرسال الدعوات",
+"Hantar jemputan",
+"அழைப்புகளை அனுப்பு"
+],
+"Invite": [
+"邀请",
+"دعوة",
+"Jemput",
+"அழை"
+],
+"Join": [
+"加入",
+"انضمام",
+"Sertai",
+"சேர்"
+],
+"Join with your code": [
+"用邀请码加入",
+"انضم باستخدام رمزك",
+"Sertai dengan kod anda",
+"உங்கள் குறியீட்டுடன் சேர்"
+],
+"Back": [
+"返回",
+"رجوع",
+"Kembali",
+"பின்"
+],
+"+ New chit": [
+"+ 新储蓄会",
+"+ جمعية جديدة",
+"+ Kutu baharu",
+"+ புதிய சீட்டு"
+],
+"My chits": [
+"我的储蓄会",
+"جمعياتي",
+"Kutu saya",
+"என் சீட்டுகள்"
+],
+"Kitty parties": [
+"姐妹聚会",
+"حفلات كيتي",
+"Parti kitty",
+"கிட்டி பார்ட்டிகள்"
+],
+"+ Kitty party": [
+"+ 姐妹聚会",
+"+ حفلة كيتي",
+"+ Parti kitty",
+"+ கிட்டி பார்ட்டி"
+],
+"This month": [
+"本月",
+"هذا الشهر",
+"Bulan ini",
+"இந்த மாதம்"
+],
+"Board": [
+"看板",
+"اللوحة",
+"Papan",
+"பலகை"
+],
+"My passbook": [
+"我的账本",
+"دفتري",
+"Buku akaun saya",
+"என் கணக்குப் புத்தகம்"
+],
+"Draw": [
+"抽签",
+"القرعة",
+"Cabutan",
+"குலுக்கல்"
+],
+"People": [
+"成员",
+"الأعضاء",
+"Ahli",
+"உறுப்பினர்கள்"
+],
+"Parties": [
+"聚会",
+"الحفلات",
+"Parti",
+"பார்ட்டிகள்"
+],
+"Log": [
+"记录",
+"السجل",
+"Log",
+"பதிவு"
+],
+"Paid": [
+"已付",
+"مدفوع",
+"Dibayar",
+"செலுத்தியது"
+],
+"Paid late": [
+"迟付",
+"دُفع متأخرًا",
+"Dibayar lewat",
+"தாமதமாகச் செலுத்தியது"
+],
+"Late": [
+"逾期",
+"متأخر",
+"Lewat",
+"தாமதம்"
+],
+"Due soon": [
+"即将到期",
+"يستحق قريبًا",
+"Akan tiba masa bayar",
+"விரைவில் செலுத்த வேண்டும்"
+],
+"Due today": [
+"今天到期",
+"مستحق اليوم",
+"Perlu dibayar hari ini",
+"இன்று செலுத்த வேண்டும்"
+],
+"In grace period": [
+"宽限期内",
+"في فترة السماح",
+"Dalam tempoh tangguh",
+"சலுகைக் காலத்தில்"
+],
+"Not due yet": [
+"尚未到期",
+"لم يحن موعده بعد",
+"Belum tiba masa",
+"இன்னும் செலுத்த நேரமில்லை"
+],
+"Part paid": [
+"部分已付",
+"مدفوع جزئيًا",
+"Dibayar sebahagian",
+"பகுதி செலுத்தியது"
+],
+"Waiting for treasurer": [
+"等待财务确认",
+"بانتظار أمين الصندوق",
+"Menunggu bendahari",
+"பொருளாளருக்காகக் காத்திருக்கிறது"
+],
+"Treasurer": [
+"财务",
+"أمين الصندوق",
+"Bendahari",
+"பொருளாளர்"
+],
+"Co-signer": [
+"共同签署人",
+"الموقّع المشارك",
+"Penandatangan bersama",
+"இணை கையொப்பமிடுபவர்"
+],
+"I paid": [
+"我已付款",
+"لقد دفعت",
+"Saya sudah bayar",
+"நான் செலுத்தினேன்"
+],
+"Record": [
+"记录",
+"تسجيل",
+"Rekod",
+"பதிவு செய்"
+],
+"Details": [
+"详情",
+"التفاصيل",
+"Butiran",
+"விவரங்கள்"
+],
+"Confirm": [
+"确认",
+"تأكيد",
+"Sahkan",
+"உறுதிசெய்"
+],
+"Not received": [
+"未收到",
+"لم يُستلم",
+"Belum diterima",
+"பெறவில்லை"
+],
+"Remind": [
+"提醒",
+"تذكير",
+"Ingatkan",
+"நினைவூட்டு"
+],
+"Save": [
+"保存",
+"حفظ",
+"Simpan",
+"சேமி"
+],
+"Cancel": [
+"取消",
+"إلغاء",
+"Batal",
+"ரத்து செய்"
+],
+"Close": [
+"关闭",
+"إغلاق",
+"Tutup",
+"மூடு"
+],
+"Next": [
+"下一步",
+"التالي",
+"Seterusnya",
+"அடுத்து"
+],
+"Create": [
+"创建",
+"إنشاء",
+"Cipta",
+"உருவாக்கு"
+],
+"Delete": [
+"删除",
+"حذف",
+"Padam",
+"நீக்கு"
+],
+"Start chit": [
+"开始储蓄会",
+"ابدأ الجمعية",
+"Mulakan kutu",
+"சீட்டைத் தொடங்கு"
+],
+"Draw now": [
+"立即抽签",
+"اسحب القرعة الآن",
+"Cabut sekarang",
+"இப்போது குலுக்கு"
+],
+"Verify draw": [
+"核验抽签",
+"تحقق من القرعة",
+"Sahkan cabutan",
+"குலுக்கலைச் சரிபார்"
+],
+"Watch replay": [
+"观看回放",
+"شاهد الإعادة",
+"Tonton ulangan",
+"மறுஒளிபரப்பைப் பார்"
+],
+"Share proof": [
+"分享凭证",
+"شارك الإثبات",
+"Kongsi bukti",
+"ஆதாரத்தைப் பகிர்"
+],
+"I agree": [
+"我同意",
+"أوافق",
+"Saya setuju",
+"ஒப்புக்கொள்கிறேன்"
+],
+"Agreement": [
+"协议",
+"الاتفاقية",
+"Perjanjian",
+"ஒப்பந்தம்"
+],
+"Add my lucky number": [
+"添加我的幸运数字",
+"أضف رقمي المحظوظ",
+"Tambah nombor bertuah saya",
+"என் அதிர்ஷ்ட எண்ணைச் சேர்"
+],
+"Lucky number": [
+"幸运数字",
+"الرقم المحظوظ",
+"Nombor bertuah",
+"அதிர்ஷ்ட எண்"
+],
+"Collected": [
+"已收取",
+"تم التحصيل",
+"Dikutip",
+"வசூலிக்கப்பட்டது"
+],
+"Members this month": [
+"本月成员",
+"أعضاء هذا الشهر",
+"Ahli bulan ini",
+"இந்த மாத உறுப்பினர்கள்"
+],
+"Month by month": [
+"逐月查看",
+"شهرًا بشهر",
+"Bulan demi bulan",
+"மாதந்தோறும்"
+],
+"Paid so far": [
+"已付合计",
+"المدفوع حتى الآن",
+"Dibayar setakat ini",
+"இதுவரை செலுத்தியது"
+],
+"Still to pay": [
+"还需支付",
+"المتبقي للدفع",
+"Masih perlu dibayar",
+"இன்னும் செலுத்த வேண்டியது"
+],
+"Download my statement": [
+"下载我的对账单",
+"تنزيل كشف حسابي",
+"Muat turun penyata saya",
+"என் கணக்கு அறிக்கையைப் பதிவிறக்கு"
+],
+"Get ready to start": [
+"准备开始",
+"استعد للبدء",
+"Sedia untuk mula",
+"தொடங்கத் தயாராகுங்கள்"
+],
+"Who is coming": [
+"谁会来",
+"من سيحضر",
+"Siapa yang datang",
+"யார் வருகிறார்கள்"
+],
+"Coming": [
+"会来",
+"قادم",
+"Datang",
+"வருகிறேன்"
+],
+"Not coming": [
+"不来",
+"لن يحضر",
+"Tidak datang",
+"வரவில்லை"
+],
+"Joined later": [
+"后来加入",
+"انضم لاحقًا",
+"Sertai kemudian",
+"பின்னர் சேர்ந்தார்"
+],
+"+ Add bill": [
+"+ 添加账单",
+"+ إضافة فاتورة",
+"+ Tambah bil",
+"+ பில் சேர்"
+],
+"Add bill": [
+"添加账单",
+"إضافة فاتورة",
+"Tambah bil",
+"பில் சேர்"
+],
+"Save bill": [
+"保存账单",
+"حفظ الفاتورة",
+"Simpan bil",
+"பில்லைச் சேமி"
+],
+"Total spent": [
+"总支出",
+"إجمالي الإنفاق",
+"Jumlah dibelanjakan",
+"மொத்தச் செலவு"
+],
+"Who owes what": [
+"谁欠多少",
+"من مدين بكم",
+"Siapa berhutang berapa",
+"யார் எவ்வளவு தர வேண்டும்"
+],
+"Who pays whom": [
+"谁付给谁",
+"من يدفع لمن",
+"Siapa bayar siapa",
+"யார் யாருக்குச் செலுத்த வேண்டும்"
+],
+"Bills": [
+"账单",
+"الفواتير",
+"Bil",
+"பில்கள்"
+],
+"Mark paid": [
+"标记已付",
+"تحديد كمدفوع",
+"Tanda dibayar",
+"செலுத்தியதாகக் குறி"
+],
+"Remove": [
+"移除",
+"إزالة",
+"Buang",
+"அகற்று"
+],
+"Download CSV": [
+"下载CSV",
+"تنزيل CSV",
+"Muat turun CSV",
+"CSV பதிவிறக்கு"
+],
+"Copy summary for WhatsApp": [
+"复制摘要到WhatsApp",
+"نسخ الملخص لواتساب",
+"Salin ringkasan untuk WhatsApp",
+"WhatsApp-க்கான சுருக்கத்தை நகலெடு"
+],
+"Amount": [
+"金额",
+"المبلغ",
+"Jumlah",
+"தொகை"
+],
+"Date": [
+"日期",
+"التاريخ",
+"Tarikh",
+"தேதி"
+],
+"Name": [
+"姓名",
+"الاسم",
+"Nama",
+"பெயர்"
+],
+"Currency": [
+"货币",
+"العملة",
+"Mata wang",
+"நாணயம்"
+],
+"New chit": [
+"新储蓄会",
+"جمعية جديدة",
+"Kutu baharu",
+"புதிய சீட்டு"
+],
+"Choose…": [
+"请选择…",
+"اختر…",
+"Pilih…",
+"தேர்ந்தெடு…"
+],
+"Live and shared": [
+"实时共享",
+"مباشر ومشترك",
+"Langsung dan dikongsi",
+"நேரலை, பகிரப்பட்டது"
+],
+"View only": [
+"仅查看",
+"للعرض فقط",
+"Lihat sahaja",
+"பார்க்க மட்டும்"
+],
+"Saved on this phone": [
+"已保存在此手机",
+"محفوظ على هذا الهاتف",
+"Disimpan pada telefon ini",
+"இந்த போனில் சேமிக்கப்பட்டது"
+],
+"Try again": [
+"重试",
+"حاول مرة أخرى",
+"Cuba lagi",
+"மீண்டும் முயற்சி"
+],
+"Who are you?": [
+"你是谁？",
+"من أنت؟",
+"Siapa anda?",
+"நீங்கள் யார்?"
+],
+"Treasurer (the person who conducts the chit)": [
+"财务（负责运作储蓄会的人）",
+"أمين الصندوق (الشخص الذي يدير الجمعية)",
+"Bendahari (orang yang menjalankan kutu)",
+"பொருளாளர் (சீட்டை நடத்துபவர்)"
+],
+"Fair, clear and shared. Everyone sees the same books.": [
+"公平、清楚、共享。人人看到同样的账目。",
+"عادل وواضح ومشترك. الجميع يرى الحسابات نفسها.",
+"Adil, jelas dan dikongsi. Semua orang melihat buku akaun yang sama.",
+"நியாயமாக, தெளிவாக, பகிரப்பட்டது. எல்லோரும் ஒரே கணக்கைப் பார்க்கிறார்கள்."
+],
+"Chat": [
+"聊天",
+"الدردشة",
+"Sembang",
+"அரட்டை"
+],
+"Group chat": [
+"群聊",
+"دردشة المجموعة",
+"Sembang kumpulan",
+"குழு அரட்டை"
+],
+"Party chat": [
+"聚会群聊",
+"دردشة الحفلة",
+"Sembang parti",
+"பார்ட்டி அரட்டை"
+],
+"One-to-one chats": [
+"私聊",
+"الدردشات الفردية",
+"Sembang peribadi",
+"தனிப்பட்ட அரட்டைகள்"
+],
+"Open group chat": [
+"打开群聊",
+"فتح دردشة المجموعة",
+"Buka sembang kumpulan",
+"குழு அரட்டையைத் திற"
+],
+"No messages yet. Say hello!": [
+"还没有消息。打个招呼吧！",
+"لا توجد رسائل بعد. ابدأ بالتحية!",
+"Belum ada mesej. Ucapkan helo!",
+"இன்னும் செய்திகள் இல்லை. வணக்கம் சொல்லுங்கள்!"
+],
+"Type a message…": [
+"输入消息…",
+"اكتب رسالة…",
+"Taip mesej…",
+"செய்தியை உள்ளிடுங்கள்…"
+],
+"Send": [
+"发送",
+"إرسال",
+"Hantar",
+"அனுப்பு"
+],
+"Only you two see this chat in the app. It is not fully private: anyone who can open the group’s database could read it. For anything sensitive, use WhatsApp.": [
+"此聊天仅你们两人在应用内可见。但并非完全私密：能打开群组数据库的人都可能读到。涉及敏感内容，请使用WhatsApp。",
+"هذه الدردشة يراها أنتما فقط داخل التطبيق. وهي ليست خاصة تمامًا: يمكن لأي شخص يستطيع فتح قاعدة بيانات المجموعة قراءتها. للأمور الحساسة استخدموا واتساب.",
+"Hanya anda berdua nampak sembang ini dalam aplikasi. Ia tidak sepenuhnya peribadi: sesiapa yang boleh membuka pangkalan data kumpulan boleh membacanya. Untuk perkara sensitif, gunakan WhatsApp.",
+"இந்த அரட்டையை செயலியில் நீங்கள் இருவர் மட்டுமே பார்க்கிறீர்கள். இது முழுமையாகத் தனிப்பட்டது அல்ல: குழுவின் தரவுத்தளத்தைத் திறக்கக்கூடிய யாரும் இதைப் படிக்க முடியும். முக்கியமானவற்றுக்கு WhatsApp பயன்படுத்துங்கள்."
+],
+"Sakhi: On (call her with @Sakhi)": [
+"Sakhi：已开启（用 @Sakhi 呼叫她）",
+"Sakhi: مفعّلة (نادِها بـ @Sakhi)",
+"Sakhi: Hidup (panggil dengan @Sakhi)",
+"Sakhi: இயக்கத்தில் (@Sakhi என்று அழைக்கவும்)"
+],
+"Sakhi: Off": [
+"Sakhi：已关闭",
+"Sakhi: متوقفة",
+"Sakhi: Mati",
+"Sakhi: நிறுத்தப்பட்டது"
+],
+"Sakhi is asking to join": [
+"Sakhi 请求加入",
+"Sakhi تطلب الانضمام",
+"Sakhi meminta untuk sertai",
+"Sakhi சேரக் கேட்கிறார்"
+],
+"Yes, she can join": [
+"是的，可以加入",
+"نعم، يمكنها الانضمام",
+"Ya, dia boleh sertai",
+"ஆம், அவர் சேரலாம்"
+],
+"No": [
+"否",
+"لا",
+"Tidak",
+"இல்லை"
+],
+"Turn off": [
+"关闭",
+"إيقاف",
+"Matikan",
+"நிறுத்து"
+],
+"Turn on": [
+"开启",
+"تشغيل",
+"Hidupkan",
+"இயக்கு"
+],
+"Only the treasurer or party host can turn Sakhi on.": [
+"只有财务或聚会主办人可以开启 Sakhi。",
+"يمكن لأمين الصندوق أو مضيف الحفلة فقط تشغيل Sakhi.",
+"Hanya bendahari atau tuan rumah parti boleh menghidupkan Sakhi.",
+"பொருளாளர் அல்லது பார்ட்டி நடத்துபவர் மட்டுமே Sakhi-ஐ இயக்க முடியும்."
+],
+"Sakhi is off in this chat. The treasurer or host can turn her on.": [
+"此聊天中 Sakhi 已关闭。财务或主办人可以开启。",
+"Sakhi متوقفة في هذه الدردشة. يمكن لأمين الصندوق أو المضيف تشغيلها.",
+"Sakhi dimatikan dalam sembang ini. Bendahari atau tuan rumah boleh menghidupkannya.",
+"இந்த அரட்டையில் Sakhi நிறுத்தப்பட்டுள்ளது. பொருளாளர் அல்லது நடத்துபவர் இயக்கலாம்."
+],
+"You can read the chat but not write in it.": [
+"你可以阅读聊天，但不能发言。",
+"يمكنك قراءة الدردشة ولكن لا يمكنك الكتابة فيها.",
+"Anda boleh membaca sembang tetapi tidak boleh menulis.",
+"நீங்கள் அரட்டையைப் படிக்கலாம், ஆனால் எழுத முடியாது."
+],
+"Sakhi is thinking…": [
+"Sakhi 正在思考…",
+"Sakhi تفكر…",
+"Sakhi sedang berfikir…",
+"Sakhi யோசிக்கிறார்…"
+],
+"Sakhi: following the chat": [
+"Sakhi：正在关注聊天",
+"Sakhi: تتابع الدردشة",
+"Sakhi: mengikuti sembang",
+"Sakhi: அரட்டையைப் பின்தொடர்கிறார்"
+],
+"Report": [
+"举报",
+"إبلاغ",
+"Laporkan",
+"புகாரளி"
+],
+"Reported": [
+"已举报",
+"تم الإبلاغ",
+"Dilaporkan",
+"புகாரளிக்கப்பட்டது"
+],
+"Remove for everyone": [
+"为所有人删除",
+"إزالة للجميع",
+"Buang untuk semua",
+"அனைவருக்கும் நீக்கு"
+],
+"Message removed by the treasurer.": [
+"消息已被财务删除。",
+"حذف أمين الصندوق هذه الرسالة.",
+"Mesej dibuang oleh bendahari.",
+"செய்தியை பொருளாளர் நீக்கினார்."
+],
+"Block": [
+"屏蔽",
+"حظر",
+"Sekat",
+"தடு"
+],
+"Unblock": [
+"取消屏蔽",
+"إلغاء الحظر",
+"Nyahsekat",
+"தடையை நீக்கு"
+],
+"You blocked this person.": [
+"你已屏蔽此人。",
+"لقد حظرت هذا الشخص.",
+"Anda telah menyekat orang ini.",
+"நீங்கள் இவரைத் தடுத்துள்ளீர்கள்."
+],
+"Reported. The treasurer can remove it.": [
+"已举报。财务可以删除。",
+"تم الإبلاغ. يمكن لأمين الصندوق حذفها.",
+"Dilaporkan. Bendahari boleh membuangnya.",
+"புகாரளிக்கப்பட்டது. பொருளாளர் நீக்கலாம்."
+],
+"Message": [
+"消息",
+"رسالة",
+"Mesej",
+"செய்தி"
+],
+"When does it start?": [
+"何时开始？",
+"متى تبدأ؟",
+"Bilakah ia bermula?",
+"எப்போது தொடங்குகிறது?"
+],
+"How much each month, for one share?": [
+"每股每月多少钱？",
+"كم المبلغ كل شهر لحصة واحدة؟",
+"Berapa setiap bulan untuk satu syer?",
+"ஒரு பங்குக்கு மாதம் எவ்வளவு?"
+],
+"Who are the members? Write your own name first (you will be the treasurer; you can change this on the last page). One name per line.": [
+"成员有谁？请先写你自己的名字（你将担任财务，可在最后一页更改）。每行一个名字。",
+"من هم الأعضاء؟ اكتب اسمك أولًا (ستكون أمين الصندوق ويمكنك تغيير ذلك في الصفحة الأخيرة). اسم واحد في كل سطر.",
+"Siapakah ahli? Tulis nama anda dahulu (anda akan menjadi bendahari; boleh ditukar di halaman terakhir). Satu nama setiap baris.",
+"உறுப்பினர்கள் யார்? முதலில் உங்கள் பெயரை எழுதுங்கள் (நீங்கள் பொருளாளராக இருப்பீர்கள்; கடைசிப் பக்கத்தில் மாற்றலாம்). ஒரு வரிக்கு ஒரு பெயர்."
+],
+"Last question: add phone numbers now (for WhatsApp) or later?": [
+"最后一个问题：现在添加手机号（用于WhatsApp），还是以后再加？",
+"السؤال الأخير: هل تضيف أرقام الهواتف الآن (لواتساب) أم لاحقًا؟",
+"Soalan terakhir: tambah nombor telefon sekarang (untuk WhatsApp) atau kemudian?",
+"கடைசிக் கேள்வி: தொலைபேசி எண்களை (WhatsApp-க்காக) இப்போது சேர்க்கவா, பிறகா?"
+],
+"Now": [
+"现在",
+"الآن",
+"Sekarang",
+"இப்போது"
+],
+"Later": [
+"以后",
+"لاحقًا",
+"Kemudian",
+"பிறகு"
+],
+"Review and approve": [
+"查看并批准",
+"مراجعة وموافقة",
+"Semak dan luluskan",
+"பார்வையிட்டு அங்கீகரிக்கவும்"
+],
+"The country code is added for you.": [
+"国家区号会自动添加。",
+"تتم إضافة رمز الدولة تلقائيًا.",
+"Kod negara ditambah untuk anda.",
+"நாட்டுக் குறியீடு உங்களுக்காகச் சேர்க்கப்படும்."
+],
+"What is the planned budget for the party?": [
+"聚会的预算是多少？",
+"ما الميزانية المخطط لها للحفلة؟",
+"Berapakah bajet yang dirancang untuk parti?",
+"பார்ட்டிக்கான திட்டமிட்ட பட்ஜெட் என்ன?"
+],
+"Who is the treasurer? Type the name.": [
+"谁是财务？请输入名字。",
+"من هو أمين الصندوق؟ اكتب الاسم.",
+"Siapakah bendahari? Taip nama.",
+"பொருளாளர் யார்? பெயரை எழுதுங்கள்."
+],
+"Are you the treasurer?": [
+"你是财务吗？",
+"هل أنت أمين الصندوق؟",
+"Adakah anda bendahari?",
+"நீங்கள் பொருளாளரா?"
+],
+"What is your name?": [
+"你叫什么名字？",
+"ما اسمك؟",
+"Siapa nama anda?",
+"உங்கள் பெயர் என்ன?"
+],
+"Yes": [
+"是",
+"نعم",
+"Ya",
+"ஆம்"
+],
+"Who is the treasurer? Pick yourself if you are the treasurer.": [
+"谁是财务？如果你是财务，请选自己。",
+"من هو أمين الصندوق؟ اختر نفسك إن كنت أمين الصندوق.",
+"Siapakah bendahari? Pilih diri anda jika anda bendahari.",
+"பொருளாளர் யார்? நீங்கள் பொருளாளர் என்றால் உங்களையே தேர்ந்தெடுங்கள்."
+],
+"Are kids allowed at this party?": [
+"这场聚会可以带孩子吗？",
+"هل يُسمح بالأطفال في هذه الحفلة؟",
+"Adakah kanak-kanak dibenarkan di parti ini?",
+"இந்தப் பார்ட்டிக்குக் குழந்தைகள் அனுமதிக்கப்படுகிறார்களா?"
+],
+"Who is the host of this party?": [
+"这场聚会的主办人是谁？",
+"من مضيف هذه الحفلة؟",
+"Siapakah tuan rumah parti ini?",
+"இந்தப் பார்ட்டியை நடத்துபவர் யார்?"
+],
+"Dress code, date and time. Tap OK to accept all three.": [
+"着装要求、日期和时间。点击“确定”接受全部三项。",
+"الزي والتاريخ والوقت. اضغط موافق لقبول الثلاثة.",
+"Kod pakaian, tarikh dan masa. Ketik OK untuk terima ketiga-tiganya.",
+"உடை, தேதி, நேரம். மூன்றையும் ஏற்க OK தட்டுங்கள்."
+],
+"Dress code": [
+"着装要求",
+"الزي",
+"Kod pakaian",
+"உடை விதி"
+],
+"Time": [
+"时间",
+"الوقت",
+"Masa",
+"நேரம்"
+],
+"Another idea": [
+"换个主意",
+"فكرة أخرى",
+"Idea lain",
+"வேறு யோசனை"
+],
+"No dress code": [
+"无着装要求",
+"بدون زي محدد",
+"Tiada kod pakaian",
+"உடை விதி இல்லை"
+],
+"OK, create the party": [
+"好，创建聚会",
+"حسنًا، أنشئ الحفلة",
+"OK, cipta parti",
+"சரி, பார்ட்டியை உருவாக்கு"
+],
+"Which group is this for?": [
+"这是给哪个群组的？",
+"لأي مجموعة هذه؟",
+"Untuk kumpulan yang mana?",
+"இது எந்தக் குழுவுக்கு?"
+],
+"Tea and Samosa": [
+"茶与萨莫萨",
+"الشاي والسمبوسة",
+"Teh dan Samosa",
+"டீயும் சமோசாவும்"
+],
+"Choose the two fixed days, once.": [
+"选择两个固定日期，只需一次。",
+"اختر اليومين الثابتين مرة واحدة.",
+"Pilih dua hari tetap, sekali sahaja.",
+"இரண்டு நிலையான நாட்களை ஒருமுறை தேர்ந்தெடுங்கள்."
+],
+"Which day of the week?": [
+"星期几？",
+"أي يوم من الأسبوع؟",
+"Hari apa dalam seminggu?",
+"வாரத்தின் எந்த நாள்?"
+],
+"Which two weeks of the month?": [
+"每月的哪两周？",
+"أي أسبوعين من الشهر؟",
+"Dua minggu yang mana dalam sebulan?",
+"மாதத்தின் எந்த இரண்டு வாரங்கள்?"
+],
+"Save these days": [
+"保存这些日期",
+"حفظ هذه الأيام",
+"Simpan hari-hari ini",
+"இந்த நாட்களைச் சேமி"
+],
+"Next Tea and Samosa": [
+"下一次茶与萨莫萨",
+"الشاي والسمبوسة القادم",
+"Teh dan Samosa seterusnya",
+"அடுத்த டீயும் சமோசாவும்"
+],
+"Host": [
+"主办人",
+"المضيف",
+"Tuan rumah",
+"நடத்துபவர்"
+],
+"Swap host": [
+"更换主办人",
+"تبديل المضيف",
+"Tukar tuan rumah",
+"நடத்துபவரை மாற்று"
+],
+"Create this Tea and Samosa party": [
+"创建这场茶与萨莫萨聚会",
+"إنشاء حفلة الشاي والسمبوسة هذه",
+"Cipta parti Teh dan Samosa ini",
+"இந்த டீயும் சமோசாவும் பார்ட்டியை உருவாக்கு"
+],
+"Open the party": [
+"打开聚会",
+"فتح الحفلة",
+"Buka parti",
+"பார்ட்டியைத் திற"
+],
+"Snack guide": [
+"小食指南",
+"دليل الوجبات الخفيفة",
+"Panduan snek",
+"சிற்றுண்டி வழிகாட்டி"
+],
+"Game for the day": [
+"今日游戏",
+"لعبة اليوم",
+"Permainan hari ini",
+"இன்றைய விளையாட்டு"
+],
+"Change the days": [
+"更改日期",
+"تغيير الأيام",
+"Tukar hari",
+"நாட்களை மாற்று"
+],
+"The treasurer chooses the days.": [
+"由财务选择日期。",
+"يختار أمين الصندوق الأيام.",
+"Bendahari memilih hari.",
+"நாட்களைப் பொருளாளர் தேர்ந்தெடுக்கிறார்."
+],
+"Search near me on Google Maps": [
+"在Google地图搜索附近",
+"البحث بالقرب مني في خرائط Google",
+"Cari berhampiran saya di Google Maps",
+"Google Maps-இல் எனக்கு அருகில் தேடு"
+],
+"Ask Sakhi": [
+"问 Sakhi",
+"اسأل Sakhi",
+"Tanya Sakhi",
+"Sakhi-யிடம் கேள்"
+],
+"Sakhi": [
+"Sakhi",
+"Sakhi",
+"Sakhi",
+"Sakhi"
+],
+"Type here…": [
+"在此输入…",
+"اكتب هنا…",
+"Taip di sini…",
+"இங்கே உள்ளிடுங்கள்…"
+],
+"Thinking…": [
+"思考中…",
+"جارٍ التفكير…",
+"Sedang berfikir…",
+"யோசிக்கிறது…"
+],
+"Stop": [
+"停止",
+"إيقاف",
+"Berhenti",
+"நிறுத்து"
+],
+"Hello! I am Sakhi, your helper. I only suggest, you decide. What would you like to do?": [
+"你好！我是 Sakhi，你的小帮手。我只提建议，决定由你来做。你想做什么？",
+"مرحبًا! أنا Sakhi، مساعدتك. أنا أقترح فقط وأنتِ تقرّرين. ماذا تودين أن تفعلي؟",
+"Helo! Saya Sakhi, pembantu anda. Saya hanya mencadangkan, anda yang membuat keputusan. Apa yang anda mahu lakukan?",
+"வணக்கம்! நான் Sakhi, உங்கள் உதவியாளர். நான் ஆலோசனை மட்டுமே சொல்வேன், முடிவு உங்களுடையது. என்ன செய்ய விரும்புகிறீர்கள்?"
+],
+"Plan a party": [
+"策划聚会",
+"خطط لحفلة",
+"Rancang parti",
+"பார்ட்டியைத் திட்டமிடு"
+],
+"Start a new chit": [
+"开始新的储蓄会",
+"ابدأ جمعية جديدة",
+"Mulakan kutu baharu",
+"புதிய சீட்டைத் தொடங்கு"
+],
+"Dress code idea": [
+"着装创意",
+"فكرة للزي",
+"Idea kod pakaian",
+"உடை யோசனை"
+],
+"Suggest a game": [
+"推荐游戏",
+"اقترح لعبة",
+"Cadangkan permainan",
+"ஒரு விளையாட்டைப் பரிந்துரை"
+],
+"A kind quote": [
+"一句暖心的话",
+"اقتباس لطيف",
+"Petikan yang baik",
+"ஓர் இனிய மேற்கோள்"
+],
+"Kids at the party": [
+"聚会中的孩子",
+"الأطفال في الحفلة",
+"Kanak-kanak di parti",
+"பார்ட்டியில் குழந்தைகள்"
+],
+"Find a place": [
+"找场地",
+"ابحث عن مكان",
+"Cari tempat",
+"இடத்தைத் தேடு"
+],
+"Tea and Samosa days": [
+"茶与萨莫萨日",
+"أيام الشاي والسمبوسة",
+"Hari Teh dan Samosa",
+"டீயும் சமோசாவும் நாட்கள்"
+],
+"Share the party cost": [
+"分摊聚会费用",
+"تقاسم تكلفة الحفلة",
+"Kongsi kos parti",
+"பார்ட்டி செலவைப் பகிர்"
+],
+"Who hosts next?": [
+"下次谁主办？",
+"من المضيف التالي؟",
+"Siapa tuan rumah seterusnya?",
+"அடுத்து யார் நடத்துவது?"
+],
+"Sakhi can chat only inside the Claude app. You can still use the buttons above.": [
+"Sakhi 只能在 Claude 应用内聊天。你仍可使用上面的按钮。",
+"يمكن لـ Sakhi الدردشة داخل تطبيق Claude فقط. ما زال بإمكانك استخدام الأزرار أعلاه.",
+"Sakhi hanya boleh bersembang dalam aplikasi Claude. Anda masih boleh guna butang di atas.",
+"Sakhi, Claude செயலிக்குள் மட்டுமே அரட்டையடிக்க முடியும். மேலுள்ள பொத்தான்களை நீங்கள் இன்னும் பயன்படுத்தலாம்."
+],
+"Sakhi needs your permission to use Claude. Please try again and tap Allow.": [
+"Sakhi 需要你的许可才能使用 Claude。请重试并点击“允许”。",
+"تحتاج Sakhi إلى إذنك لاستخدام Claude. حاولي مرة أخرى واضغطي سماح.",
+"Sakhi memerlukan kebenaran anda untuk menggunakan Claude. Sila cuba lagi dan ketik Benarkan.",
+"Claude-ஐப் பயன்படுத்த Sakhi-க்கு உங்கள் அனுமதி தேவை. மீண்டும் முயன்று Allow தட்டுங்கள்."
+],
+"Sakhi is busy right now. Please wait a minute and try again.": [
+"Sakhi 现在有点忙。请稍等一分钟后重试。",
+"Sakhi مشغولة الآن. انتظري دقيقة ثم حاولي مرة أخرى.",
+"Sakhi sedang sibuk. Sila tunggu seminit dan cuba lagi.",
+"Sakhi இப்போது பிஸியாக இருக்கிறார். ஒரு நிமிடம் காத்திருந்து மீண்டும் முயற்சி செய்யுங்கள்."
+],
+"Sorry, I could not answer. Please try again.": [
+"抱歉，我没能回答。请重试。",
+"عذرًا، لم أتمكن من الإجابة. حاولي مرة أخرى.",
+"Maaf, saya tidak dapat menjawab. Sila cuba lagi.",
+"மன்னிக்கவும், என்னால் பதிலளிக்க முடியவில்லை. மீண்டும் முயற்சி செய்யுங்கள்."
+],
+"Open the draft": [
+"打开草稿",
+"افتح المسودة",
+"Buka draf",
+"வரைவைத் திற"
+],
+"Use this theme": [
+"使用此主题",
+"استخدم هذا الموضوع",
+"Guna tema ini",
+"இந்தக் கருப்பொருளைப் பயன்படுத்து"
+],
+"We will play these": [
+"我们就玩这些",
+"سنلعب هذه",
+"Kita akan main ini",
+"இவற்றை விளையாடுவோம்"
+],
+"Done": [
+"完成",
+"تم",
+"Selesai",
+"முடிந்தது"
+],
+"Check on Google Maps": [
+"在Google地图查看",
+"تحقق في خرائط Google",
+"Semak di Google Maps",
+"Google Maps-இல் பார்"
+],
+"Sakhi suggests ideas. Please check timings, prices and reviews on Google before booking.": [
+"Sakhi 只提供建议。预订前请在 Google 上核对时间、价格和评价。",
+"تقترح Sakhi أفكارًا فقط. تحققي من المواعيد والأسعار والتقييمات على Google قبل الحجز.",
+"Sakhi hanya mencadangkan idea. Sila semak waktu, harga dan ulasan di Google sebelum menempah.",
+"Sakhi யோசனைகளை மட்டுமே பரிந்துரைக்கிறார். முன்பதிவு செய்யும் முன் நேரம், விலை, மதிப்புரைகளை Google-இல் சரிபாருங்கள்."
+],
+"Tea and Samosa day": [
+"茶与萨莫萨日",
+"يوم الشاي والسمبوسة",
+"Hari Teh dan Samosa",
+"டீயும் சமோசாவும் நாள்"
+],
+"Suggested host": [
+"建议主办人",
+"المضيف المقترح",
+"Tuan rumah dicadangkan",
+"பரிந்துரைக்கப்பட்ட நடத்துபவர்"
+],
+"Hide Sakhi tips for me": [
+"对我隐藏 Sakhi 提示",
+"إخفاء نصائح Sakhi عني",
+"Sembunyikan petua Sakhi untuk saya",
+"எனக்கு Sakhi குறிப்புகளை மறை"
+],
+"Show Sakhi tips for me": [
+"对我显示 Sakhi 提示",
+"إظهار نصائح Sakhi لي",
+"Tunjukkan petua Sakhi untuk saya",
+"எனக்கு Sakhi குறிப்புகளைக் காட்டு"
+],
+"Hide tips for everyone (treasurer)": [
+"对所有人隐藏提示（财务）",
+"إخفاء النصائح للجميع (أمين الصندوق)",
+"Sembunyikan petua untuk semua (bendahari)",
+"அனைவருக்கும் குறிப்புகளை மறை (பொருளாளர்)"
+],
+"Show tips for everyone (treasurer)": [
+"对所有人显示提示（财务）",
+"إظهار النصائح للجميع (أمين الصندوق)",
+"Tunjukkan petua untuk semua (bendahari)",
+"அனைவருக்கும் குறிப்புகளைக் காட்டு (பொருளாளர்)"
+],
+"Sakhi uses Claude. A ChatGPT back-up is available in the website version.": [
+"Sakhi 使用 Claude。网页版另有 ChatGPT 备用。",
+"تستخدم Sakhi نموذج Claude. تتوفر نسخة احتياطية ChatGPT في نسخة الموقع.",
+"Sakhi menggunakan Claude. Sandaran ChatGPT tersedia dalam versi laman web.",
+"Sakhi, Claude-ஐப் பயன்படுத்துகிறார். இணையதளப் பதிப்பில் ChatGPT மாற்றாகக் கிடைக்கிறது."
+],
+"Settings": [
+"设置",
+"الإعدادات",
+"Tetapan",
+"அமைப்புகள்"
+],
+"Set Tea and Samosa days": [
+"设置茶与萨莫萨日",
+"تحديد أيام الشاي والسمبوسة",
+"Tetapkan hari Teh dan Samosa",
+"டீயும் சமோசாவும் நாட்களை அமை"
+],
+"For children at a party: bring them with a small corner of toys or colours, or let two trusted members mind them in another room, or share the cost of a helper you know. Keep emergency numbers and allergy notes with you, and let only known people pick them up. Please check any daycare yourself.": [
+"带孩子参加聚会：可以为他们准备一个放玩具或彩笔的小角落，或让两位信任的成员在另一个房间照看，或分担一位你认识的看护人的费用。请随身携带紧急联系电话和过敏说明，只让认识的人接走孩子。托管机构请自行核实。",
+"للأطفال في الحفلة: أحضريهم مع ركن صغير للألعاب أو الألوان، أو دعي عضوتين موثوقتين تعتنيان بهم في غرفة أخرى، أو تقاسمي تكلفة مساعدة تعرفينها. احتفظي بأرقام الطوارئ وملاحظات الحساسية معك، ولا تسمحي إلا لأشخاص معروفين باصطحابهم. تحققي بنفسك من أي حضانة.",
+"Untuk kanak-kanak di parti: bawa mereka bersama sudut kecil mainan atau warna, atau minta dua ahli yang dipercayai menjaga mereka di bilik lain, atau kongsi kos pembantu yang anda kenali. Simpan nombor kecemasan dan nota alahan bersama anda, dan hanya benarkan orang yang dikenali menjemput mereka. Sila semak sendiri mana-mana pusat jagaan.",
+"பார்ட்டியில் குழந்தைகளுக்காக: பொம்மைகள் அல்லது வண்ணங்களுடன் ஒரு சிறிய மூலையை அமைத்துக் கொண்டு வாருங்கள்; அல்லது நம்பகமான இரண்டு உறுப்பினர்கள் வேறு அறையில் பார்த்துக்கொள்ளட்டும்; அல்லது உங்களுக்குத் தெரிந்த ஒரு உதவியாளரின் செலவைப் பகிருங்கள். அவசர எண்களையும் ஒவ்வாமைக் குறிப்புகளையும் உங்களுடன் வைத்திருங்கள்; தெரிந்தவர்கள் மட்டுமே அவர்களை அழைத்துச் செல்லட்டும். எந்தப் பகல்நேரப் பராமரிப்பு மையத்தையும் நீங்களே சரிபார்த்துக் கொள்ளுங்கள்."
+],
+"A woman who earns, learns and decides for herself lifts everyone around her.": [
+"自己赚钱、学习、做主的女性，会带动身边每一个人。",
+"المرأة التي تكسب وتتعلم وتقرر لنفسها ترفع كل من حولها.",
+"Wanita yang berpendapatan, belajar dan membuat keputusan sendiri mengangkat semua orang di sekelilingnya.",
+"தானே சம்பாதித்து, கற்று, முடிவெடுக்கும் பெண் தன்னைச் சுற்றியுள்ள அனைவரையும் உயர்த்துகிறாள்."
+],
+"Small savings, made by yourself, grow into big confidence.": [
+"自己存下的小积蓄，会长成大大的自信。",
+"المدخرات الصغيرة التي تصنعينها بنفسك تنمو لتصبح ثقة كبيرة.",
+"Simpanan kecil yang anda buat sendiri membesar menjadi keyakinan yang besar.",
+"நீங்களே சேமிக்கும் சிறு சேமிப்பு பெரிய தன்னம்பிக்கையாக வளர்கிறது."
+],
+"You do not need permission to grow. Take one step for yourself today.": [
+"成长不需要许可。今天就为自己迈出一步。",
+"لا تحتاجين إلى إذن لتنمي نفسك. خذي اليوم خطوة واحدة لنفسك.",
+"Anda tidak perlukan kebenaran untuk berkembang. Ambil satu langkah untuk diri anda hari ini.",
+"வளர உங்களுக்கு அனுமதி தேவையில்லை. இன்று உங்களுக்காக ஒரு அடி எடுத்து வையுங்கள்."
+],
+"Learning a new skill is the best gift you can give yourself.": [
+"学一项新技能，是送给自己最好的礼物。",
+"تعلّم مهارة جديدة هو أفضل هدية تقدمينها لنفسك.",
+"Mempelajari kemahiran baharu ialah hadiah terbaik untuk diri sendiri.",
+"புதிய திறமையைக் கற்பது உங்களுக்கு நீங்களே தரக்கூடிய சிறந்த பரிசு."
+],
+"Strong women help each other rise. Look around this circle, you are not alone.": [
+"坚强的女性互相扶持。看看这个圈子，你并不孤单。",
+"النساء القويات يساعدن بعضهن على النهوض. انظري حول هذه الدائرة، لست وحدك.",
+"Wanita yang kuat membantu satu sama lain bangkit. Lihat sekeliling kumpulan ini, anda tidak keseorangan.",
+"வலிமையான பெண்கள் ஒருவருக்கொருவர் உயர உதவுகிறார்கள். இந்த வட்டத்தைப் பாருங்கள், நீங்கள் தனியாக இல்லை."
+],
+"Your time matters too. Keep one hour in the week only for you.": [
+"你的时间同样重要。每周留出一小时，只属于你自己。",
+"وقتك مهم أيضًا. احتفظي بساعة واحدة في الأسبوع لك وحدك.",
+"Masa anda juga penting. Simpan satu jam seminggu hanya untuk diri anda.",
+"உங்கள் நேரமும் முக்கியம். வாரத்தில் ஒரு மணி நேரத்தை உங்களுக்காக மட்டும் வையுங்கள்."
+],
+"Dream first, plan next, start small. Your own money gives your dreams wings.": [
+"先做梦，再规划，从小处开始。自己的钱会给梦想插上翅膀。",
+"احلمي أولًا، ثم خططي، وابدئي صغيرة. مالك الخاص يمنح أحلامك أجنحة.",
+"Bermimpi dahulu, rancang kemudian, mulakan kecil. Wang anda sendiri memberi sayap kepada impian anda.",
+"முதலில் கனவு காணுங்கள், பிறகு திட்டமிடுங்கள், சிறிதாகத் தொடங்குங்கள். உங்கள் சொந்தப் பணம் கனவுகளுக்கு இறக்கை தருகிறது."
+],
+"Ask for help when you need it. Asking is also strength.": [
+"需要时就开口求助。求助也是一种力量。",
+"اطلبي المساعدة عندما تحتاجين إليها. طلب المساعدة قوة أيضًا.",
+"Minta bantuan apabila perlu. Meminta juga satu kekuatan.",
+"தேவைப்படும்போது உதவி கேளுங்கள். கேட்பதும் ஒரு பலம்."
+]
+};
+(function(){
+  var L=['zh','ar','ms','ta'];
+  L.forEach(function(k){D[k]={};});
+  Object.keys(LX).forEach(function(en){L.forEach(function(k,i){D[k][en]=LX[en][i];});});
+  function ext(r){if(!r||!r.length)return;var x=LX[r[0]];if(!x)return;for(var i=0;i<4;i++)r[3+i]=x[i];}
+  [CT,FT,SKT].forEach(function(T){Object.keys(T).forEach(function(k){ext(T[k]);});});
+  SK_QUOTES.forEach(ext);
+})();
+function setDir(){
+  var h=document.documentElement;
+  h.setAttribute('dir',S.lang==='ar'?'rtl':'ltr');
+  h.setAttribute('lang',S.lang==='zh'?'zh-Hans':(S.lang||'en'));
+}
 /* ===== LITE edition: no chat, no photo sharing. Payment-proof screenshots stay (UPI or WhatsApp). ===== */
 if(LITE){
   var NOP=function(){};
@@ -4098,7 +5319,7 @@ if(window.__KMW){
      +'</div>'+(role==='in'&&!n.own?'<div class="notice info small">Want to run your own chit? Tap <b>Treasurer</b>.</div>':'');
   };
   homeShowCode=function(){return (CTX_ROLE||homeTab())==='in';};
-  roleTag=function(c){var m=mineChit(c);return '<div class="tiny"><span class="pill '+(m?'s-ready':'s-info')+'">'+(m?'You are the treasurer':'You are a member')+'</span> <span class="tiny mute">v27</span></div>';};
+  roleTag=function(c){var m=mineChit(c);return '<div class="tiny"><span class="pill '+(m?'s-ready':'s-info')+'">'+(m?'You are the treasurer':'You are a member')+'</span> <span class="tiny mute">v28</span></div>';};
   ACT.htab=function(t,id){try{localStorage.setItem('km_home_tab',id==='in'?'in':id==='req'?'req':'run');}catch(e){}render(true);};
   var _vh=viewHome;
   viewHome=function(){
