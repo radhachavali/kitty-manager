@@ -1,9 +1,11 @@
-	
-0	
-relation	
-0	"delegate_permission/common.handle_all_urls"
-target	
-namespace	"android_app"
-package_name	"com.kittymanager.app"
-sha256_cert_fingerprints	
-0	"EC:6E:37:72:CA:3E:99:B6:CF:F7:BE:A1:CE:AF:97:9B:52:00:93:61:F5:16:D0:44:58:81:7C:09:39:21:7D:E1"
+[{
+  "relation": ["delegate_permission/common.handle_all_urls"],
+  "target": {
+    "namespace": "android_app",
+    "package_name": "com.kittymanager.app",
+    "sha256_cert_fingerprints": [
+      "42:4F:97:33:B6:09:A8:CE:8F:13:69:E4:B9:2D:EF:4F:AE:C7:33:17:ED:F5:6C:B8:60:4C:31:5E:AA:87:9D:01",
+      "E2:25:3D:A3:92:74:38:81:22:95:FF:AE:34:20:0E:2D:C0:F9:48:76:FE:C5:3E:38:39:1B:51:9C:0A:01:51:59"
+    ]
+  }
+}]
