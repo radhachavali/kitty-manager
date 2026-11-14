@@ -3820,7 +3820,7 @@ if(LITE){
   };
   /* a short link (maps.app.goo.gl) has no name in it: open it through a public relay and read the place name */
   var plFetch=function(url,ms){
-    var ctl=(typeof AbortController!=='undefined')?new AbortController():null,tm=setTimeout(function(){try{ctl&&ctl.abort();}catch(e){}},ms||9000);
+    var ctl=(typeof AbortController!=='undefined')?new AbortController():null,tm=setTimeout(function(){try{ctl&&ctl.abort();}catch(e){}},ms||4500);
     return fetch(url,ctl?{signal:ctl.signal}:{}).then(function(r){clearTimeout(tm);if(!r.ok)throw new Error('http');return r.text();},function(e){clearTimeout(tm);throw e;});
   };
   var plClean=function(t){
@@ -3856,12 +3856,12 @@ if(LITE){
     }else{
       if(fromPlace)pl.value='';
       var tok=S.sheet.rtok=(S.sheet.rtok||0)+1;
-      plNote('Finding the place name…');
+      plNote('\u2713 Link saved. Looking for the place name (a few seconds). You can also type it above.');
       plResolve(u,function(nm){
         var pl2=document.getElementById('pplace');if(!pl2||!S.sheet||S.sheet.rtok!==tok)return;
         var c2=pl2.value.trim();
         if(nm){if(!c2||c2===S.sheet.auto){pl2.value=nm;S.sheet.auto=nm;}plNote('✓ Link saved and place name filled in. You can change the name.');pgsRefresh();}
-        else{plNote(c2?'✓ Link saved.':'Could not find the name by itself. Type the place name above.');if(!c2){try{pl2.focus();}catch(e){}}}
+        else{plNote(c2?'\u2713 Link saved.':'\u2713 Link saved. The name could not be found by itself, so please type the place name above.');if(!c2){try{pl2.focus();}catch(e){}}}
       });
     }
     pgsRefresh();return true;
@@ -4210,7 +4210,7 @@ if(window.__KMW){
      +'</div>'+(role==='in'&&!n.own?'<div class="notice info small">Want to run your own chit? Tap <b>Treasurer</b>.</div>':'');
   };
   homeShowCode=function(){return (CTX_ROLE||homeTab())==='in';};
-  roleTag=function(c){var m=mineChit(c);return '<div class="tiny"><span class="pill '+(m?'s-ready':'s-info')+'">'+(m?'You are the treasurer':'You are a member')+'</span> <span class="tiny mute">v32</span></div>';};
+  roleTag=function(c){var m=mineChit(c);return '<div class="tiny"><span class="pill '+(m?'s-ready':'s-info')+'">'+(m?'You are the treasurer':'You are a member')+'</span> <span class="tiny mute">v33</span></div>';};
   ACT.htab=function(t,id){try{localStorage.setItem('km_home_tab',id==='in'?'in':id==='req'?'req':'run');}catch(e){}render(true);};
   var _vh=viewHome;
   viewHome=function(){
@@ -4233,7 +4233,7 @@ if(window.__KMW){
   ACT.skgpt=function(){toast('Sakhi answers from a built-in list on this website. Smart answers are not switched on yet.');};
 }
 
-/* ===== v32: two-taps chit setup ===== */
+/* ===== v33: two-taps chit setup ===== */
 (function(){
   var st=document.createElement('style');
   st.textContent='.qstep{display:flex;align-items:center;gap:10px}.qstep button{width:52px;height:52px;border-radius:14px;border:1px solid var(--line);background:var(--card);color:var(--pri,#7a2e6e);font-size:26px;font-weight:800;cursor:pointer;flex:0 0 auto}.qstep input{flex:1;min-width:0;text-align:center;font-size:26px;font-weight:800}.qsum{background:var(--soft,#f6e9f3);border-radius:14px;padding:14px}.qsum .big{font-size:28px;font-weight:800}#pplsug2 .btn{white-space:normal}';
@@ -4292,7 +4292,7 @@ if(window.__KMW){
   };
 })();
 
-/* ===== v32: search for a place with Google ===== */
+/* ===== v33: search for a place with Google ===== */
 (function(){
   function key(){return (window.KM_CONFIG&&window.KM_CONFIG.maps)||'';}
   var last='',tok='',ctl=null,list=[];
@@ -4336,7 +4336,7 @@ if(window.__KMW){
   };
 })();
 
-/* ===== v32: one tap to bring the copied Maps place back ===== */
+/* ===== v33: one tap to bring the copied Maps place back ===== */
 ACT.pgpaste=function(){
   var lk=document.getElementById('pmaplink');if(!lk)return;
   var use=function(t){
