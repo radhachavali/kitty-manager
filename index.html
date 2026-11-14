@@ -803,6 +803,7 @@ function tabMonth(c,pays,today){
     if(winMode(c)&&w===me.id)tip='You are the winner this month. The others pay you directly. Confirm each payment when the money reaches you.';
     h+=sakhi(esc(tip));
   }
+  if(c.status!=='draft'){h+='<div class="mstrip" role="tablist" aria-label="Months">'+(function(){var o='',outs=outsMap(c.id);for(var i=0;i<N(c);i++){var sp=payoutState(c,pays,outs,i,today).s,cls=(i===m?'c':((sp==='done'||sp==='paid')?'d':''));o+='<button type="button" class="mchip '+cls+'" data-act="monset" data-m="'+i+'" aria-label="'+monthLabel(c,i)+'">'+(cls==='d'?'\u2713 ':'')+(i+1)+'</button>';}return o;})()+'</div>';}
   h+='<div class="row between"><button class="btn sm" data-act="mon" data-d="-1"'+(m<=0?' disabled':'')+' aria-label="Earlier month">◀</button><h2>'+monthLabel(c,m)+' <span class="mute small">month '+(m+1)+' of '+N(c)+'</span></h2><button class="btn sm" data-act="mon" data-d="1"'+(m>=N(c)-1?' disabled':'')+' aria-label="Later month">▶</button></div>';
   h+='<div class="card hero stack"><div class="row between"><div><div class="small mute">Collected</div><div class="big num">'+fmtM(coll,c.cur)+'</div></div><div style="text-align:right"><div class="small mute">of</div><div class="num"><b>'+fmtM(pool,c.cur)+'</b></div></div></div><div class="bar"><i style="width:'+pct+'%"></i></div><div class="small">Due <b>'+niceD(dd)+'</b> · grace until <b>'+niceD(ge)+'</b> '+(winMode(c)?'· paid directly to the winner':'· payout <b>'+niceD(payoutDate(c,m))+'</b>')+'</div></div>';
   if(w)h+='<div class="card"><div class="row between"><div><div class="small mute">♛ Winner of '+monthLabel(c,m)+'</div><h3>'+esc(mname(c,w))+'</h3></div>'+pill(ps.s)+'</div>'+payoutBlock(c,m,ps,tre,me,today)+'</div>';
@@ -817,7 +818,7 @@ function tabMonth(c,pays,today){
   h+='<div class="card stack"><h3>Members this month</h3>'+c.members.map(function(mem){
     var mm=memberMonth(c,pays,mem.id,m,today),fn=fineFor(c,mm);
     var canAct=(me&&mem.id===me.id)||tre||(winMode(c)&&me&&w&&w===me.id&&mem.id!==w);
-    return '<div class="item"><div class="grow"><b>'+esc(mem.name)+'</b>'+(mem.id===c.tre?' <span class="tiny mute">treasurer</span>':'')+(mem.id===w?' <span class="crown">♛</span>':'')+'<div class="small mute">'+(amtView(c,mem.id,mm.due)?esc(amtView(c,mem.id,mm.paid))+' of '+esc(amtView(c,mem.id,mm.due)):'')+(fn?' · fine '+esc(fmtM(fn,c.cur)):'')+'</div></div><div class="row" style="gap:6px;flex-wrap:nowrap">'+pill(mm.st)+(canAct&&!S.ro&&mm.st!=='paid'&&mm.st!=='paidlate'&&mm.st!=='waiting'?'<button class="btn sm pri" data-act="paysheet" data-id="'+mem.id+'" data-m="'+m+'">'+(mem.id===(me&&me.id)?'I paid':'Paid')+'</button>':'<button class="btn sm ghost" data-act="cell" data-id="'+mem.id+'" data-m="'+m+'">Details</button>')+'</div></div>';
+    return '<div class="item"><div class="grow"><b>'+esc(mem.name)+'</b>'+(mem.id===c.tre?' <span class="tiny mute">treasurer</span>':'')+(mem.id===w?' <span class="crown">♛</span>':'')+'<div class="small mute">'+(amtView(c,mem.id,mm.due)?esc(amtView(c,mem.id,mm.paid))+' of '+esc(amtView(c,mem.id,mm.due)):'')+(fn?' · fine '+esc(fmtM(fn,c.cur)):'')+'</div></div><div class="row" style="gap:6px;flex-wrap:nowrap">'+pill(mm.st)+(canAct&&!S.ro&&mm.st!=='paid'&&mm.st!=='paidlate'&&mm.st!=='waiting'?(tre?'<button class="btn sm pri" data-act="qpaid" data-id="'+mem.id+'" data-m="'+m+'">\u2713 Paid</button>':'<button class="btn sm pri" data-act="paysheet" data-id="'+mem.id+'" data-m="'+m+'">'+(mem.id===(me&&me.id)?'I paid':'Paid')+'</button>'):'<button class="btn sm ghost" data-act="cell" data-id="'+mem.id+'" data-m="'+m+'">Details</button>')+'</div></div>';
   }).join('')+'</div></div>';
   return h;
 }
@@ -4210,7 +4211,7 @@ if(window.__KMW){
      +'</div>'+(role==='in'&&!n.own?'<div class="notice info small">Want to run your own chit? Tap <b>Treasurer</b>.</div>':'');
   };
   homeShowCode=function(){return (CTX_ROLE||homeTab())==='in';};
-  roleTag=function(c){var m=mineChit(c);return '<div class="tiny"><span class="pill '+(m?'s-ready':'s-info')+'">'+(m?'You are the treasurer':'You are a member')+'</span> <span class="tiny mute">v35</span></div>';};
+  roleTag=function(c){var m=mineChit(c);return '<div class="tiny"><span class="pill '+(m?'s-ready':'s-info')+'">'+(m?'You are the treasurer':'You are a member')+'</span> <span class="tiny mute">v36</span></div>';};
   ACT.htab=function(t,id){try{localStorage.setItem('km_home_tab',id==='in'?'in':id==='req'?'req':'run');}catch(e){}render(true);};
   var _vh=viewHome;
   viewHome=function(){
@@ -4233,7 +4234,7 @@ if(window.__KMW){
   ACT.skgpt=function(){toast('Sakhi answers from a built-in list on this website. Smart answers are not switched on yet.');};
 }
 
-/* ===== v35: two-taps chit setup ===== */
+/* ===== v36: two-taps chit setup ===== */
 (function(){
   var st=document.createElement('style');
   st.textContent='.qstep{display:flex;align-items:center;gap:10px}.qstep button{width:52px;height:52px;border-radius:14px;border:1px solid var(--line);background:var(--card);color:var(--pri,#7a2e6e);font-size:26px;font-weight:800;cursor:pointer;flex:0 0 auto}.qstep input{flex:1;min-width:0;text-align:center;font-size:26px;font-weight:800}.qsum{background:var(--soft,#f6e9f3);border-radius:14px;padding:14px}.qsum .big{font-size:28px;font-weight:800}#pplsug2 .btn{white-space:normal}';
@@ -4291,7 +4292,7 @@ if(window.__KMW){
   };
 })();
 
-/* ===== v35: search for a place with Google ===== */
+/* ===== v36: search for a place with Google ===== */
 (function(){
   function key(){return (window.KM_CONFIG&&window.KM_CONFIG.maps)||'';}
   var last='',tok='',ctl=null,list=[];
@@ -4353,7 +4354,7 @@ if(window.__KMW){
   };
 })();
 
-/* ===== v35: one tap to bring the copied Maps place back ===== */
+/* ===== v36: one tap to bring the copied Maps place back ===== */
 ACT.pgpaste=function(){
   var lk=document.getElementById('pmaplink');if(!lk)return;
   var use=function(t){
@@ -4363,5 +4364,29 @@ ACT.pgpaste=function(){
   try{navigator.clipboard.readText().then(use,function(){toast('Press and hold the link box, then tap Paste.','warn');try{lk.focus();}catch(e){}});}
   catch(e){try{lk.focus();}catch(x){}}
 };
+
+/* ===== v36: month strip and one-tap Paid for the treasurer ===== */
+(function(){
+  var st=document.createElement('style');
+  st.textContent='.mstrip{display:flex;gap:6px;overflow-x:auto;padding-bottom:4px}.mchip{flex:0 0 auto;min-width:42px;padding:9px 10px;border-radius:10px;border:0;font:inherit;font-weight:700;font-size:13px;background:var(--line);color:var(--mut);cursor:pointer}.mchip.d{background:var(--tsoft,#e3f2f1);color:var(--teal,#12767a)}.mchip.c{background:var(--pri,#7a2e6e);color:#fff}';
+  document.head.appendChild(st);
+  ACT.monset=function(t){var c=G();if(!c)return;S.mon=Math.max(0,Math.min(N(c)-1,+t.getAttribute('data-m')));render();};
+  ACT.qpaid=function(t){
+    var c=G();if(!c||!isTre(c)||S.ro)return;
+    var mid=t.getAttribute('data-id'),m=+t.getAttribute('data-m'),today=todayIn(c.tz);
+    var mm=memberMonth(c,paysOf(c.id),mid,m,today),rest=Math.max(0,mm.due-mm.paid-mm.waiting);
+    if(!(rest>0)){toast('Nothing is left to pay for this month.');return;}
+    var id=uid(),who=myId(c)||c.tre,nm=mname(c,mid);
+    if(winMode(c)){
+      var w=winnerMid(c,m);if(!w){toast('The winner is not drawn yet.','warn');return;}if(mid===w)return;
+      put('pays',id,{cid:c.id,mid:mid,m:m,to:w,amt:rest,date:today,method:'WhatsApp confirmation',proof:'wa',ref:'',note:'',shot:false,st:'paid',by:who,conf:who,confAt:isoNow(),rec:'treasurer',at:isoNow()});
+      logAdd(c,'pay','Treasurer marked '+nm+' as paid '+fmtM(rest,c.cur)+' to '+mname(c,w)+' for '+monthLabel(c,m)+' on '+today+' (one tap).',who,{to:w,pay:id});
+    }else{
+      put('pays',id,{cid:c.id,mid:mid,m:m,amt:rest,date:today,method:'Cash or other',note:'',st:'paid',by:who,at:isoNow()});
+      logAdd(c,'pay',nm+' paid '+fmtM(rest,c.cur)+' for '+monthLabel(c,m)+' (one tap), confirmed by treasurer.',who);
+    }
+    toast(nm+' marked as paid. Tap Details to undo.');
+  };
+})();
 boot();
 })();</script><script>if("serviceWorker" in navigator&&location.protocol.indexOf("http")===0){window.addEventListener("load",function(){navigator.serviceWorker.register("sw.js").catch(function(){});});}</script></body></html>
