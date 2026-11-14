@@ -2510,8 +2510,8 @@ ACT.skteaset=function(){SK.menu=false;skMenu();ACT.sksendtext('Please help us ch
 
 /* ---------- the party screen helpers ---------- */
 ACT.pmap=function(){
-  var q=(val('pplace')||'').trim()||'party hall restaurant near me';
-  var a=document.createElement('a');a.href='https://www.google.com/maps/search/?api=1&query='+encodeURIComponent(q);a.target='_blank';a.rel='noopener';document.body.appendChild(a);a.click();a.remove();
+  var q=(val('pplace')||'').trim()||'party hall restaurant near me',lk0=document.getElementById('pmaplink'),lm0=lk0&&/https?:\/\/\S+/.exec(lk0.value||'');
+  var a=document.createElement('a');a.href=lm0?lm0[0]:'https://www.google.com/maps/search/?api=1&query='+encodeURIComponent(q);a.target='_blank';a.rel='noopener';document.body.appendChild(a);a.click();a.remove();
 };
 ACT.pask=function(){
   var b=val('pbud').trim(),pl=val('pplace').trim(),dt=val('pdt');
@@ -3012,7 +3012,10 @@ function parsePlace(t){
 }
 function pgsRefresh(){
   var a=document.getElementById('pgs'),i=document.getElementById('pplace');if(!a||!i)return;
+  var lk=document.getElementById('pmaplink'),lm=lk&&/https?:\/\/\S+/.exec(lk.value||'');
+  if(lm){a.setAttribute('href',lm[0].replace(/[)\].,;]+$/,''));var t1='\uD83D\uDCCD Open this place in Maps';if(a.textContent!==t1)a.textContent=t1;return;}
   var q=(i.value||'').trim();a.setAttribute('href','https://www.google.com/maps/search/?api=1&query='+encodeURIComponent(q&&!/banquet|function hall|wedding|marriage hall/i.test(q)?q:'cafe near me'));
+  var t2='\uD83D\uDD0D Search on Google Maps';if(a.textContent!==t2)a.textContent=t2;
 }
 function pgsApply(t){
   var p=parsePlace(t),i=document.getElementById('pplace');if(!p||!i)return false;
@@ -4211,7 +4214,7 @@ if(window.__KMW){
      +'</div>'+(role==='in'&&!n.own?'<div class="notice info small">Want to run your own chit? Tap <b>Treasurer</b>.</div>':'');
   };
   homeShowCode=function(){return (CTX_ROLE||homeTab())==='in';};
-  roleTag=function(c){var m=mineChit(c);return '<div class="tiny"><span class="pill '+(m?'s-ready':'s-info')+'">'+(m?'You are the treasurer':'You are a member')+'</span> <span class="tiny mute">v36</span></div>';};
+  roleTag=function(c){var m=mineChit(c);return '<div class="tiny"><span class="pill '+(m?'s-ready':'s-info')+'">'+(m?'You are the treasurer':'You are a member')+'</span> <span class="tiny mute">v37</span></div>';};
   ACT.htab=function(t,id){try{localStorage.setItem('km_home_tab',id==='in'?'in':id==='req'?'req':'run');}catch(e){}render(true);};
   var _vh=viewHome;
   viewHome=function(){
@@ -4234,7 +4237,7 @@ if(window.__KMW){
   ACT.skgpt=function(){toast('Sakhi answers from a built-in list on this website. Smart answers are not switched on yet.');};
 }
 
-/* ===== v36: two-taps chit setup ===== */
+/* ===== v37: two-taps chit setup ===== */
 (function(){
   var st=document.createElement('style');
   st.textContent='.qstep{display:flex;align-items:center;gap:10px}.qstep button{width:52px;height:52px;border-radius:14px;border:1px solid var(--line);background:var(--card);color:var(--pri,#7a2e6e);font-size:26px;font-weight:800;cursor:pointer;flex:0 0 auto}.qstep input{flex:1;min-width:0;text-align:center;font-size:26px;font-weight:800}.qsum{background:var(--soft,#f6e9f3);border-radius:14px;padding:14px}.qsum .big{font-size:28px;font-weight:800}#pplsug2 .btn{white-space:normal}';
@@ -4292,7 +4295,7 @@ if(window.__KMW){
   };
 })();
 
-/* ===== v36: search for a place with Google ===== */
+/* ===== v37: search for a place with Google ===== */
 (function(){
   function key(){return (window.KM_CONFIG&&window.KM_CONFIG.maps)||'';}
   var last='',tok='',ctl=null,list=[];
@@ -4319,7 +4322,7 @@ if(window.__KMW){
       var seen={},out=[];
       (j.features||[]).forEach(function(f){var p=f.properties||{},main=p.name||p.street||'';if(!main)return;
         var sec=[p.name&&p.street?p.street:'',p.district,p.city,p.state].filter(function(v,i,a){return v&&v!==main&&a.indexOf(v)===i;}).join(', ');
-        var x={id:'',main:main,sec:sec,osm:1};if(bad(x))return;var k=main+'|'+sec;if(seen[k])return;seen[k]=1;out.push(x);});
+        var co=(f.geometry&&f.geometry.coordinates)||[],x={id:'',main:main,sec:sec,osm:1,lat:co[1],lon:co[0]};if(bad(x))return;var k=main+'|'+sec;if(seen[k])return;seen[k]=1;out.push(x);});
       show(out.slice(0,5),out.length?'':'No places found. Try adding the area, like "Garden cafe Banjara Hills". You can still type the name.');
       if(out.length){var b=box();if(b)b.insertAdjacentHTML('beforeend','');}
     },function(e){if(e&&e.name==='AbortError')return;show([],'Place search is not working right now. Use Search on Google Maps below.');});
@@ -4340,13 +4343,14 @@ if(window.__KMW){
   setInterval(function(){
     var inp=document.getElementById('pplace');
     if(!inp){last='';return;}
+    if(typeof pgsRefresh==='function')pgsRefresh();
     var q=inp.value.trim();if(q===last)return;last=q;
     if(q.length<3||/^https?:/i.test(q)){var b=document.getElementById('pplsug2');if(b)b.innerHTML='';return;}
     search(q);
   },450);
   ACT.pgpick=function(t,i){
     var x=list[+i],inp=document.getElementById('pplace'),lk=document.getElementById('pmaplink');if(!x||!inp||!S.sheet)return;
-    var url='https://www.google.com/maps/search/?api=1&query='+encodeURIComponent((x.main+' '+x.sec).trim())+(x.id?'&query_place_id='+encodeURIComponent(x.id):'');
+    var url=(x.osm&&isFinite(x.lat)&&isFinite(x.lon))?('https://maps.google.com/?q='+x.lat+','+x.lon+'%28'+encodeURIComponent(x.main).replace(/[()]/g,'')+'%29'):('https://www.google.com/maps/search/?api=1&query='+encodeURIComponent((x.main+' '+x.sec).trim())+(x.id?'&query_place_id='+encodeURIComponent(x.id):''));
     inp.value=x.main.slice(0,60);last=inp.value.trim();S.sheet.auto=inp.value;S.sheet.maps=url;if(lk)lk.value=url;
     var n=document.getElementById('pmapsnote');if(n)n.textContent='✓ Place picked, with its Google Maps link. Everyone can tap to open it.';
     var b=document.getElementById('pplsug2');if(b)b.innerHTML='';list=[];newTok();
@@ -4354,7 +4358,7 @@ if(window.__KMW){
   };
 })();
 
-/* ===== v36: one tap to bring the copied Maps place back ===== */
+/* ===== v37: one tap to bring the copied Maps place back ===== */
 ACT.pgpaste=function(){
   var lk=document.getElementById('pmaplink');if(!lk)return;
   var use=function(t){
@@ -4365,7 +4369,7 @@ ACT.pgpaste=function(){
   catch(e){try{lk.focus();}catch(x){}}
 };
 
-/* ===== v36: month strip and one-tap Paid for the treasurer ===== */
+/* ===== v37: month strip and one-tap Paid for the treasurer ===== */
 (function(){
   var st=document.createElement('style');
   st.textContent='.mstrip{display:flex;gap:6px;overflow-x:auto;padding-bottom:4px}.mchip{flex:0 0 auto;min-width:42px;padding:9px 10px;border-radius:10px;border:0;font:inherit;font-weight:700;font-size:13px;background:var(--line);color:var(--mut);cursor:pointer}.mchip.d{background:var(--tsoft,#e3f2f1);color:var(--teal,#12767a)}.mchip.c{background:var(--pri,#7a2e6e);color:#fff}';
