@@ -4210,7 +4210,7 @@ if(window.__KMW){
      +'</div>'+(role==='in'&&!n.own?'<div class="notice info small">Want to run your own chit? Tap <b>Treasurer</b>.</div>':'');
   };
   homeShowCode=function(){return (CTX_ROLE||homeTab())==='in';};
-  roleTag=function(c){var m=mineChit(c);return '<div class="tiny"><span class="pill '+(m?'s-ready':'s-info')+'">'+(m?'You are the treasurer':'You are a member')+'</span> <span class="tiny mute">v33</span></div>';};
+  roleTag=function(c){var m=mineChit(c);return '<div class="tiny"><span class="pill '+(m?'s-ready':'s-info')+'">'+(m?'You are the treasurer':'You are a member')+'</span> <span class="tiny mute">v34</span></div>';};
   ACT.htab=function(t,id){try{localStorage.setItem('km_home_tab',id==='in'?'in':id==='req'?'req':'run');}catch(e){}render(true);};
   var _vh=viewHome;
   viewHome=function(){
@@ -4233,7 +4233,7 @@ if(window.__KMW){
   ACT.skgpt=function(){toast('Sakhi answers from a built-in list on this website. Smart answers are not switched on yet.');};
 }
 
-/* ===== v33: two-taps chit setup ===== */
+/* ===== v34: two-taps chit setup ===== */
 (function(){
   var st=document.createElement('style');
   st.textContent='.qstep{display:flex;align-items:center;gap:10px}.qstep button{width:52px;height:52px;border-radius:14px;border:1px solid var(--line);background:var(--card);color:var(--pri,#7a2e6e);font-size:26px;font-weight:800;cursor:pointer;flex:0 0 auto}.qstep input{flex:1;min-width:0;text-align:center;font-size:26px;font-weight:800}.qsum{background:var(--soft,#f6e9f3);border-radius:14px;padding:14px}.qsum .big{font-size:28px;font-weight:800}#pplsug2 .btn{white-space:normal}';
@@ -4292,7 +4292,7 @@ if(window.__KMW){
   };
 })();
 
-/* ===== v33: search for a place with Google ===== */
+/* ===== v34: search for a place with Google ===== */
 (function(){
   function key(){return (window.KM_CONFIG&&window.KM_CONFIG.maps)||'';}
   var last='',tok='',ctl=null,list=[];
@@ -4302,11 +4302,30 @@ if(window.__KMW){
   function show(items,msg){
     var b=box();if(!b)return;list=items;
     var h=items.map(function(x,i){return '<button type="button" class="btn sm" style="text-align:left;justify-content:flex-start" data-act="pgpick" data-id="'+i+'">📍 <b>'+esc(x.main)+'</b> <span class="mute small">'+esc(x.sec)+'</span></button>';}).join('');
-    if(items.length)h+='<div class="tiny mute">Places from Google. Tap one to use it.</div>';
+    if(items.length)h+='<div class="tiny mute">'+(key()?'Places from Google':'Places from OpenStreetMap')+'. Tap one to use it.</div>';
     if(msg)h+='<div class="tiny mute">'+esc(msg)+'</div>';
     b.innerHTML=h;
   }
+  var CC={IN:[17.4,78.5],US:[39.8,-98.6],GB:[52.5,-1.5],AE:[25.2,55.3],SG:[1.35,103.8],CN:[35.9,104.2],JP:[36.2,138.3],AU:[-25.3,133.8],CA:[56.1,-106.3]},gps='';
+  try{navigator.permissions.query({name:'geolocation'}).then(function(r){if(r.state==='granted')navigator.geolocation.getCurrentPosition(function(p){gps='&lat='+p.coords.latitude+'&lon='+p.coords.longitude;});});}catch(e){}
+  function bad(x){return /banquet|function hall|wedding|marriage hall|kalyana/i.test(x.main+' '+x.sec);}
+  function searchOSM(q){
+    if(ctl){try{ctl.abort();}catch(e){}}
+    ctl=window.AbortController?new AbortController():null;
+    var c=CC[(countryOf()||{}).c]||CC.IN,bias=gps||('&lat='+c[0]+'&lon='+c[1]);
+    fetch('https://photon.komoot.io/api/?q='+encodeURIComponent(q)+'&limit=10&lang=en'+bias,{signal:ctl?ctl.signal:undefined})
+    .then(function(r){if(!r.ok)throw new Error('http '+r.status);return r.json();})
+    .then(function(j){
+      var seen={},out=[];
+      (j.features||[]).forEach(function(f){var p=f.properties||{},main=p.name||p.street||'';if(!main)return;
+        var sec=[p.name&&p.street?p.street:'',p.district,p.city,p.state].filter(function(v,i,a){return v&&v!==main&&a.indexOf(v)===i;}).join(', ');
+        var x={id:'',main:main,sec:sec,osm:1};if(bad(x))return;var k=main+'|'+sec;if(seen[k])return;seen[k]=1;out.push(x);});
+      show(out.slice(0,5),out.length?'':'No places found. Try adding the area, like "Garden cafe Banjara Hills". You can still type the name.');
+      if(out.length){var b=box();if(b)b.insertAdjacentHTML('beforeend','');}
+    },function(e){if(e&&e.name==='AbortError')return;show([],'Place search is not working right now. Use Search on Google Maps below.');});
+  }
   function search(q){
+    if(!key())return searchOSM(q);
     if(ctl){try{ctl.abort();}catch(e){}}
     ctl=window.AbortController?new AbortController():null;
     fetch('https://places.googleapis.com/v1/places:autocomplete',{method:'POST',headers:{'Content-Type':'application/json','X-Goog-Api-Key':key()},body:JSON.stringify({input:q,sessionToken:tok,languageCode:'en'}),signal:ctl?ctl.signal:undefined})
@@ -4321,22 +4340,21 @@ if(window.__KMW){
   setInterval(function(){
     var inp=document.getElementById('pplace');
     if(!inp){last='';return;}
-    if(!key())return;
     var q=inp.value.trim();if(q===last)return;last=q;
     if(q.length<3||/^https?:/i.test(q)){var b=document.getElementById('pplsug2');if(b)b.innerHTML='';return;}
     search(q);
   },450);
   ACT.pgpick=function(t,i){
     var x=list[+i],inp=document.getElementById('pplace'),lk=document.getElementById('pmaplink');if(!x||!inp||!S.sheet)return;
-    var url='https://www.google.com/maps/search/?api=1&query='+encodeURIComponent((x.main+' '+x.sec).trim())+'&query_place_id='+encodeURIComponent(x.id);
+    var url='https://www.google.com/maps/search/?api=1&query='+encodeURIComponent((x.main+' '+x.sec).trim())+(x.id?'&query_place_id='+encodeURIComponent(x.id):'');
     inp.value=x.main.slice(0,60);last=inp.value.trim();S.sheet.auto=inp.value;S.sheet.maps=url;if(lk)lk.value=url;
-    var n=document.getElementById('pmapsnote');if(n)n.textContent='✓ Place picked from Google, with its Maps link. Everyone can tap to open it.';
+    var n=document.getElementById('pmapsnote');if(n)n.textContent='✓ Place picked, with its Google Maps link. Everyone can tap to open it.';
     var b=document.getElementById('pplsug2');if(b)b.innerHTML='';list=[];newTok();
     if(typeof pgsRefresh==='function')pgsRefresh();
   };
 })();
 
-/* ===== v33: one tap to bring the copied Maps place back ===== */
+/* ===== v34: one tap to bring the copied Maps place back ===== */
 ACT.pgpaste=function(){
   var lk=document.getElementById('pmaplink');if(!lk)return;
   var use=function(t){
