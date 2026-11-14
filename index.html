@@ -3838,11 +3838,18 @@ if(LITE){
     return m?plClean(m[1]):'';
   };
   var plResolve=function(u,cb){
+    /* ask several free relays at the same time; the first one that finds a name wins */
+    var eu=encodeURIComponent(u),done=false,left=0;
+    var fin=function(n){if(done)return;if(n){done=true;cb(n);}else if(--left<=0){done=true;cb('');}};
     var tries=[
-      function(){return plFetch('https://api.allorigins.win/get?url='+encodeURIComponent(u)).then(function(t){var j={};try{j=JSON.parse(t);}catch(e){}return plNameFrom(j.status&&j.status.url,j.contents);});},
-      function(){return plFetch('https://corsproxy.io/?'+encodeURIComponent(u)).then(function(t){return plNameFrom('',t);});}
-    ],i=0;
-    (function next(){if(i>=tries.length)return cb('');tries[i++]().then(function(n){if(n)cb(n);else next();},function(){next();});})();
+      function(){return plFetch('https://api.allorigins.win/get?url='+eu,6000).then(function(t){var j={};try{j=JSON.parse(t);}catch(e){}return plNameFrom(j.status&&j.status.url,j.contents);});},
+      function(){return plFetch('https://api.codetabs.com/v1/proxy/?quest='+eu,6000).then(function(t){return plNameFrom('',t);});},
+      function(){return plFetch('https://r.jina.ai/'+u,6000).then(function(t){var m=/^Title:\s*(.+)$/m.exec(t);return m?plClean(m[1]):plNameFrom('',t);});},
+      function(){return plFetch('https://thingproxy.freeboard.io/fetch/'+u,6000).then(function(t){return plNameFrom('',t);});},
+      function(){return plFetch('https://corsproxy.io/?'+eu,6000).then(function(t){return plNameFrom('',t);});}
+    ];
+    left=tries.length;
+    tries.forEach(function(f){try{f().then(function(n){fin(n);},function(){fin('');});}catch(e){fin('');}});
   };
   /* a link pasted (or a Maps share text) fills the link box and, when it can, the Place box */
   var plApply=function(raw,fromPlace){
@@ -4214,7 +4221,7 @@ if(window.__KMW){
      +'</div>'+(role==='in'&&!n.own?'<div class="notice info small">Want to run your own chit? Tap <b>Treasurer</b>.</div>':'');
   };
   homeShowCode=function(){return (CTX_ROLE||homeTab())==='in';};
-  roleTag=function(c){var m=mineChit(c);return '<div class="tiny"><span class="pill '+(m?'s-ready':'s-info')+'">'+(m?'You are the treasurer':'You are a member')+'</span> <span class="tiny mute">v37</span></div>';};
+  roleTag=function(c){var m=mineChit(c);return '<div class="tiny"><span class="pill '+(m?'s-ready':'s-info')+'">'+(m?'You are the treasurer':'You are a member')+'</span> <span class="tiny mute">v38</span></div>';};
   ACT.htab=function(t,id){try{localStorage.setItem('km_home_tab',id==='in'?'in':id==='req'?'req':'run');}catch(e){}render(true);};
   var _vh=viewHome;
   viewHome=function(){
@@ -4237,7 +4244,7 @@ if(window.__KMW){
   ACT.skgpt=function(){toast('Sakhi answers from a built-in list on this website. Smart answers are not switched on yet.');};
 }
 
-/* ===== v37: two-taps chit setup ===== */
+/* ===== v38: two-taps chit setup ===== */
 (function(){
   var st=document.createElement('style');
   st.textContent='.qstep{display:flex;align-items:center;gap:10px}.qstep button{width:52px;height:52px;border-radius:14px;border:1px solid var(--line);background:var(--card);color:var(--pri,#7a2e6e);font-size:26px;font-weight:800;cursor:pointer;flex:0 0 auto}.qstep input{flex:1;min-width:0;text-align:center;font-size:26px;font-weight:800}.qsum{background:var(--soft,#f6e9f3);border-radius:14px;padding:14px}.qsum .big{font-size:28px;font-weight:800}#pplsug2 .btn{white-space:normal}';
@@ -4295,7 +4302,7 @@ if(window.__KMW){
   };
 })();
 
-/* ===== v37: search for a place with Google ===== */
+/* ===== v38: search for a place with Google ===== */
 (function(){
   function key(){return (window.KM_CONFIG&&window.KM_CONFIG.maps)||'';}
   var last='',tok='',ctl=null,list=[];
@@ -4358,7 +4365,7 @@ if(window.__KMW){
   };
 })();
 
-/* ===== v37: one tap to bring the copied Maps place back ===== */
+/* ===== v38: one tap to bring the copied Maps place back ===== */
 ACT.pgpaste=function(){
   var lk=document.getElementById('pmaplink');if(!lk)return;
   var use=function(t){
@@ -4369,7 +4376,7 @@ ACT.pgpaste=function(){
   catch(e){try{lk.focus();}catch(x){}}
 };
 
-/* ===== v37: month strip and one-tap Paid for the treasurer ===== */
+/* ===== v38: month strip and one-tap Paid for the treasurer ===== */
 (function(){
   var st=document.createElement('style');
   st.textContent='.mstrip{display:flex;gap:6px;overflow-x:auto;padding-bottom:4px}.mchip{flex:0 0 auto;min-width:42px;padding:9px 10px;border-radius:10px;border:0;font:inherit;font-weight:700;font-size:13px;background:var(--line);color:var(--mut);cursor:pointer}.mchip.d{background:var(--tsoft,#e3f2f1);color:var(--teal,#12767a)}.mchip.c{background:var(--pri,#7a2e6e);color:#fff}';
