@@ -32,9 +32,10 @@
 .gtag{font-size:13px;font-weight:800;color:var(--g);letter-spacing:.02em;text-transform:uppercase}
 .wincard{border:2px solid var(--gold);background:var(--gold-soft)}
 .themebtn{min-height:36px!important;padding:4px 10px!important;font-size:18px!important;line-height:1}
-.skhome{border:2px solid transparent!important;background:linear-gradient(var(--card),var(--card)) padding-box,linear-gradient(110deg,#d98bcb,#8db8f0,#f0b84f,#d98bcb) border-box!important;background-size:100% 100%,300% 100%!important;animation:skflow 5s linear infinite;box-shadow:0 0 18px rgba(217,139,203,.25)}
+.skhome{border:2px solid transparent!important;background:linear-gradient(var(--card),var(--card)) padding-box,linear-gradient(110deg,#d98bcb,#8db8f0,#f0b84f,#d98bcb) border-box!important;background-size:100% 100%,300% 100%!important;box-shadow:0 0 18px rgba(217,139,203,.25)}
 @keyframes skflow{0%{background-position:0 0,0% 0}100%{background-position:0 0,300% 0}}
-.skhome b:first-child{animation:skspark 2.4s ease-in-out infinite;display:inline-block}
+.skhome b:first-child{display:inline-block}
+html{overflow-anchor:none}
 @keyframes skspark{0%,100%{filter:none;transform:scale(1)}50%{filter:drop-shadow(0 0 6px #d98bcb);transform:scale(1.06)}}
 @media (prefers-reduced-motion:reduce){.skhome,.skhome b:first-child{animation:none}}
 *{box-sizing:border-box}
@@ -605,11 +606,14 @@ function doRender(force){
   if(S.view==='wiz'&&!force)return;
   var root=$('#root');if(!root)return;
   if(typeof tryPending==='function')tryPending();
-  var y=window.scrollY;
-  if(S.view==='home')root.innerHTML=viewHome();
-  else if(S.view==='wiz')root.innerHTML=viewWiz();
-  else if(S.view==='chit'){var c=G();if(!c){S.view='home';root.innerHTML=viewHome();}else root.innerHTML=viewChit(c);}
-  else if(S.view==='party'){var p=P();if(!p){S.view='home';root.innerHTML=viewHome();}else root.innerHTML=viewParty(p);}
+  var y=window.scrollY,hh='';
+  if(S.view==='home')hh=viewHome();
+  else if(S.view==='wiz')hh=viewWiz();
+  else if(S.view==='chit'){var c=G();if(!c){S.view='home';hh=viewHome();}else hh=viewChit(c);}
+  else if(S.view==='party'){var p=P();if(!p){S.view='home';hh=viewHome();}else hh=viewParty(p);}
+  /* nothing changed: leave the screen alone, so it does not flicker or jump */
+  if(!force&&root.__lh===hh&&root.__lv===S.view){skFab();return;}
+  root.innerHTML=hh;root.__lh=hh;root.__lv=S.view;
   if(force!=='top'){try{window.scrollTo(0,y);}catch(e){}}
   if(S.sheet&&S.sheet.redraw){S.sheet.redraw=false;}
   skFab();if(typeof chRefresh==='function')chRefresh();
@@ -4205,7 +4209,7 @@ if(window.__KMW){
      +'</div>'+(role==='in'&&!n.own?'<div class="notice info small">Want to run your own chit? Tap <b>Treasurer</b>.</div>':'');
   };
   homeShowCode=function(){return (CTX_ROLE||homeTab())==='in';};
-  roleTag=function(c){var m=mineChit(c);return '<div class="tiny"><span class="pill '+(m?'s-ready':'s-info')+'">'+(m?'You are the treasurer':'You are a member')+'</span> <span class="tiny mute">v30</span></div>';};
+  roleTag=function(c){var m=mineChit(c);return '<div class="tiny"><span class="pill '+(m?'s-ready':'s-info')+'">'+(m?'You are the treasurer':'You are a member')+'</span> <span class="tiny mute">v31</span></div>';};
   ACT.htab=function(t,id){try{localStorage.setItem('km_home_tab',id==='in'?'in':id==='req'?'req':'run');}catch(e){}render(true);};
   var _vh=viewHome;
   viewHome=function(){
@@ -4227,5 +4231,108 @@ if(window.__KMW){
 if(window.__KMW){
   ACT.skgpt=function(){toast('Sakhi answers from a built-in list on this website. Smart answers are not switched on yet.');};
 }
+
+/* ===== v31: two-taps chit setup ===== */
+(function(){
+  var st=document.createElement('style');
+  st.textContent='.qstep{display:flex;align-items:center;gap:10px}.qstep button{width:52px;height:52px;border-radius:14px;border:1px solid var(--line);background:var(--card);color:var(--pri,#7a2e6e);font-size:26px;font-weight:800;cursor:pointer;flex:0 0 auto}.qstep input{flex:1;min-width:0;text-align:center;font-size:26px;font-weight:800}.qsum{background:var(--soft,#f6e9f3);border-radius:14px;padding:14px}.qsum .big{font-size:28px;font-weight:800}#pplsug2 .btn{white-space:normal}';
+  document.head.appendChild(st);
+  var _nw=newWiz;
+  newWiz=function(){var w=_nw();w.quick=true;w.members=[];for(var i=0;i<6;i++)w.members.push({id:uid(),name:'',shares:1,phone:''});return w;};
+  var _vw=viewWiz;
+  viewWiz=function(){var w=S.wiz;if(w&&w.quick&&!w.edit)return viewQuick(w);return _vw();};
+  var _wl=wizLive;
+  wizLive=function(){if(S.wiz&&S.wiz.quick&&!S.wiz.edit){qLive();return;}_wl();};
+  function qCount(w){var n=w.members.filter(function(m){return (m.name||'').trim();}).length;return n>=2?n:w.members.length;}
+  function qSumHtml(w){
+    var n=qCount(w),cm=toMinor(w.contrib,w.cur),h='';
+    if(!(cm>0))return '<div class="small mute">Type the monthly amount and we will work out the rest.</div>';
+    var c=wizToChit(w),last='';
+    try{h=monthLabel(c,0);last=monthLabel(c,n-1);}catch(e){}
+    return '<div class="small mute">We worked out the rest:</div><div class="big">'+esc(fmtM(cm*n,w.cur))+'</div><div>is paid out to one person each month'+(h?', from <b>'+esc(h)+'</b> to <b>'+esc(last)+'</b>':'')+'.</div><div class="small mute">'+n+' people × '+esc(fmtM(cm,w.cur))+' each month. Everyone receives the pool once, so the chit runs '+n+' months. The winner order is drawn once and then locked.</div>';
+  }
+  function qLive(){var w=S.wiz,el=$('#qsum');if(el)el.innerHTML=qSumHtml(w);
+    var named=w.members.filter(function(m){return (m.name||'').trim();});
+    [['tre'],['me']].forEach(function(k){var sel=document.querySelector('select[data-w='+k[0]+']');if(!sel)return;
+      var cur=w[k[0]];if(cur&&!named.some(function(m){return m.id===cur;})){w[k[0]]='';cur='';}
+      sel.innerHTML='<option value="">Choose\u2026</option>'+named.map(function(m){return '<option value="'+m.id+'"'+(cur===m.id?' selected':'')+'>'+esc(m.name)+'</option>';}).join('');});}
+  function viewQuick(w){
+    var h='<div class="stack">'+topBar(false)+banner();
+    h+='<div class="row between"><h1>New '+esc((w.word||'Chit').toLowerCase())+'</h1><span class="mute">Two taps</span></div>';
+    h+='<div class="card stack"><label class="f">Name<input data-w="name" value="'+esc(w.name)+'" maxlength="40" autocomplete="off"></label></div>';
+    h+='<div class="card stack"><div class="f"><b>1. How much does each person pay every month?</b></div><div class="qstep"><button data-act="qpay" data-d="-500" aria-label="Less">−</button><input data-w="contrib" inputmode="decimal" placeholder="2000" value="'+esc(w.contrib)+'" aria-label="Monthly amount"><button data-act="qpay" data-d="500" aria-label="More">+</button></div>';
+    h+='<div class="row">'+['1000','2000','5000','10000'].map(function(v){return '<button class="chip'+(String(w.contrib)===v?' on':'')+'" data-act="wset" data-k="contrib" data-v="'+v+'">'+esc(fmtM(toMinor(v,w.cur),w.cur))+'</button>';}).join('')+'</div></div>';
+    h+='<div class="card stack"><div class="f"><b>2. How many people?</b></div><div class="qstep"><button data-act="qn" data-d="-1" aria-label="Fewer">−</button><input readonly value="'+w.members.length+'" aria-label="People"><button data-act="qn" data-d="1" aria-label="More">+</button></div><div class="small mute">Everyone gets exactly one month, so the chit runs for as many months as there are people.</div></div>';
+    h+='<div class="card stack"><label class="f"><b>3. Which month does it start?</b><input type="month" data-w="first" value="'+esc(w.first)+'"></label></div>';
+    h+='<div class="qsum" id="qsum">'+qSumHtml(w)+'</div>';
+    h+='<div class="card stack"><div class="f"><b>Who is in?</b></div>'+w.members.map(function(m,i){return '<div class="row" style="flex-wrap:nowrap"><input data-wm="'+m.id+':name" placeholder="Name '+(i+1)+'" value="'+esc(m.name)+'" autocomplete="off"></div>';}).join('')+'</div>';
+    var named=w.members.filter(function(m){return (m.name||'').trim();});
+    h+='<div class="card stack"><label class="f">Treasurer (conducts the draw and payouts)<select data-w="tre"><option value="">Choose…</option>'+named.map(function(m){return '<option value="'+m.id+'"'+(w.tre===m.id?' selected':'')+'>'+esc(m.name)+'</option>';}).join('')+'</select></label>';
+    h+='<label class="f">Which one is you?<select data-w="me"><option value="">Choose…</option>'+named.map(function(m){return '<option value="'+m.id+'"'+(w.me===m.id?' selected':'')+'>'+esc(m.name)+'</option>';}).join('')+'</select></label></div>';
+    h+='<div class="small mute">Defaults: due on the 5th, payout on the 10th, 3 grace days, no fine, winner collects, everyone sees all amounts, draw all months once before you start.</div>';
+    h+='<button class="linkbtn" data-act="qmore">More rules: fines, due days, currency, draw mode</button>';
+    if(w.err)h+='<div class="err" id="werr">'+esc(w.err)+'</div>';
+    h+='<div class="row"><button class="btn" data-act="wback">Cancel</button><button class="go" style="flex:1" data-act="qgo">Create '+esc((w.word||'chit').toLowerCase())+'</button></div></div>';
+    return h;
+  }
+  ACT.qpay=function(t){var w=S.wiz;if(!w)return;var v=parseFloat(String(w.contrib).replace(/,/g,''))||0;v=Math.max(0,v+(+t.getAttribute('data-d')));w.contrib=v?String(v):'';w.err='';render(true);};
+  ACT.qn=function(t){var w=S.wiz;if(!w)return;var d=+t.getAttribute('data-d');
+    if(d>0){if(w.members.length>=30){toast('That is the most people for quick setup. Use More rules for bigger groups.','warn');return;}w.members.push({id:uid(),name:'',shares:1,phone:''});}
+    else{if(w.members.length<=2){toast('Keep at least two people.','warn');return;}var m=w.members.slice().reverse().filter(function(x){return !(x.name||'').trim();})[0]||w.members[w.members.length-1];
+      w.members=w.members.filter(function(x){return x!==m;});if(w.tre===m.id)w.tre='';if(w.me===m.id)w.me='';}
+    w.err='';render(true);};
+  ACT.qmore=function(){var w=S.wiz;if(!w)return;w.quick=false;w.step=1;w.err='';render(true);try{window.scrollTo(0,0);}catch(e){}};
+  ACT.qgo=function(){
+    var w=S.wiz;if(!w)return;
+    w.year=(w.first||'').slice(0,4);var er='';
+    for(var s=1;s<=3&&!er;s++){w.step=s;er=wizCheck(w);}
+    if(er){w.step=1;w.err=er;render(true);setTimeout(function(){var e=$('#werr');if(e)try{e.scrollIntoView({block:'center'});}catch(x){}},30);return;}
+    w.step=4;ACT.wnext();
+  };
+})();
+
+/* ===== v31: search for a place with Google ===== */
+(function(){
+  function key(){return (window.KM_CONFIG&&window.KM_CONFIG.maps)||'';}
+  var last='',tok='',ctl=null,list=[];
+  function newTok(){tok=Math.random().toString(36).slice(2)+Date.now().toString(36);}
+  newTok();
+  function box(){var inp=document.getElementById('pplace');if(!inp)return null;var b=document.getElementById('pplsug2');if(!b){b=document.createElement('div');b.id='pplsug2';b.className='stack';b.style.gap='6px';var lab=inp.closest('label');(lab||inp).insertAdjacentElement('afterend',b);}return b;}
+  function show(items,msg){
+    var b=box();if(!b)return;list=items;
+    var h=items.map(function(x,i){return '<button type="button" class="btn sm" style="text-align:left;justify-content:flex-start" data-act="pgpick" data-id="'+i+'">📍 <b>'+esc(x.main)+'</b> <span class="mute small">'+esc(x.sec)+'</span></button>';}).join('');
+    if(items.length)h+='<div class="tiny mute">Places from Google. Tap one to use it.</div>';
+    if(msg)h+='<div class="tiny mute">'+esc(msg)+'</div>';
+    b.innerHTML=h;
+  }
+  function search(q){
+    if(ctl){try{ctl.abort();}catch(e){}}
+    ctl=window.AbortController?new AbortController():null;
+    fetch('https://places.googleapis.com/v1/places:autocomplete',{method:'POST',headers:{'Content-Type':'application/json','X-Goog-Api-Key':key()},body:JSON.stringify({input:q,sessionToken:tok,languageCode:'en'}),signal:ctl?ctl.signal:undefined})
+    .then(function(r){if(!r.ok)throw new Error('http '+r.status);return r.json();})
+    .then(function(j){
+      var out=(j.suggestions||[]).map(function(s){var p=s.placePrediction;if(!p)return null;var f=p.structuredFormat||{};
+        return {id:p.placeId,main:(f.mainText&&f.mainText.text)||(p.text&&p.text.text)||'',sec:(f.secondaryText&&f.secondaryText.text)||''};})
+        .filter(function(x){return x&&x.main&&!/banquet|function hall|wedding|marriage hall|kalyana/i.test(x.main+' '+x.sec);}).slice(0,5);
+      show(out,out.length?'':'No places found. You can still type the name.');
+    },function(e){if(e&&e.name==='AbortError')return;show([],'Place search is not working right now. Use Search on Google Maps below.');});
+  }
+  setInterval(function(){
+    var inp=document.getElementById('pplace');
+    if(!inp){last='';return;}
+    if(!key())return;
+    var q=inp.value.trim();if(q===last)return;last=q;
+    if(q.length<3||/^https?:/i.test(q)){var b=document.getElementById('pplsug2');if(b)b.innerHTML='';return;}
+    search(q);
+  },450);
+  ACT.pgpick=function(t,i){
+    var x=list[+i],inp=document.getElementById('pplace'),lk=document.getElementById('pmaplink');if(!x||!inp||!S.sheet)return;
+    var url='https://www.google.com/maps/search/?api=1&query='+encodeURIComponent((x.main+' '+x.sec).trim())+'&query_place_id='+encodeURIComponent(x.id);
+    inp.value=x.main.slice(0,60);last=inp.value.trim();S.sheet.auto=inp.value;S.sheet.maps=url;if(lk)lk.value=url;
+    var n=document.getElementById('pmapsnote');if(n)n.textContent='✓ Place picked from Google, with its Maps link. Everyone can tap to open it.';
+    var b=document.getElementById('pplsug2');if(b)b.innerHTML='';list=[];newTok();
+    if(typeof pgsRefresh==='function')pgsRefresh();
+  };
+})();
 boot();
 })();</script><script>if("serviceWorker" in navigator&&location.protocol.indexOf("http")===0){window.addEventListener("load",function(){navigator.serviceWorker.register("sw.js").catch(function(){});});}</script></body></html>

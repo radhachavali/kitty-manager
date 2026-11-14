@@ -11,5 +11,7 @@ window.KM_CONFIG = {
   /* The admin (treasurer) Google account. Must match the email in firestore.rules. */
   owner: "radhakrishna.chavali@gmail.com",
   /* Phone sign-in for members (SMS code). Turn on Phone in Firebase first, then set this to true. */
-  phone: true
+  phone: true,
+  /* Google Maps key for the place search box (Places API (New) must be on). Leave empty to switch the search box off. */
+  maps: ""
 };
