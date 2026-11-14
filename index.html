@@ -4210,7 +4210,7 @@ if(window.__KMW){
      +'</div>'+(role==='in'&&!n.own?'<div class="notice info small">Want to run your own chit? Tap <b>Treasurer</b>.</div>':'');
   };
   homeShowCode=function(){return (CTX_ROLE||homeTab())==='in';};
-  roleTag=function(c){var m=mineChit(c);return '<div class="tiny"><span class="pill '+(m?'s-ready':'s-info')+'">'+(m?'You are the treasurer':'You are a member')+'</span> <span class="tiny mute">v34</span></div>';};
+  roleTag=function(c){var m=mineChit(c);return '<div class="tiny"><span class="pill '+(m?'s-ready':'s-info')+'">'+(m?'You are the treasurer':'You are a member')+'</span> <span class="tiny mute">v35</span></div>';};
   ACT.htab=function(t,id){try{localStorage.setItem('km_home_tab',id==='in'?'in':id==='req'?'req':'run');}catch(e){}render(true);};
   var _vh=viewHome;
   viewHome=function(){
@@ -4233,7 +4233,7 @@ if(window.__KMW){
   ACT.skgpt=function(){toast('Sakhi answers from a built-in list on this website. Smart answers are not switched on yet.');};
 }
 
-/* ===== v34: two-taps chit setup ===== */
+/* ===== v35: two-taps chit setup ===== */
 (function(){
   var st=document.createElement('style');
   st.textContent='.qstep{display:flex;align-items:center;gap:10px}.qstep button{width:52px;height:52px;border-radius:14px;border:1px solid var(--line);background:var(--card);color:var(--pri,#7a2e6e);font-size:26px;font-weight:800;cursor:pointer;flex:0 0 auto}.qstep input{flex:1;min-width:0;text-align:center;font-size:26px;font-weight:800}.qsum{background:var(--soft,#f6e9f3);border-radius:14px;padding:14px}.qsum .big{font-size:28px;font-weight:800}#pplsug2 .btn{white-space:normal}';
@@ -4253,10 +4253,8 @@ if(window.__KMW){
     return '<div class="small mute">We worked out the rest:</div><div class="big">'+esc(fmtM(cm*n,w.cur))+'</div><div>is paid out to one person each month'+(h?', from <b>'+esc(h)+'</b> to <b>'+esc(last)+'</b>':'')+'.</div><div class="small mute">'+n+' people × '+esc(fmtM(cm,w.cur))+' each month. Everyone receives the pool once, so the chit runs '+n+' months. The winner order is drawn once and then locked.</div>';
   }
   function qLive(){var w=S.wiz,el=$('#qsum');if(el)el.innerHTML=qSumHtml(w);
-    var named=w.members.filter(function(m){return (m.name||'').trim();});
-    [['tre'],['me']].forEach(function(k){var sel=document.querySelector('select[data-w='+k[0]+']');if(!sel)return;
-      var cur=w[k[0]];if(cur&&!named.some(function(m){return m.id===cur;})){w[k[0]]='';cur='';}
-      sel.innerHTML='<option value="">Choose\u2026</option>'+named.map(function(m){return '<option value="'+m.id+'"'+(cur===m.id?' selected':'')+'>'+esc(m.name)+'</option>';}).join('');});}
+    ['tre','me'].forEach(function(k){var cur=w[k];if(cur){var m=w.members.filter(function(x){return x.id===cur;})[0];if(!m||!(m.name||'').trim())w[k]='';}});
+  }
   function viewQuick(w){
     var h='<div class="stack">'+topBar(false)+banner();
     h+='<div class="row between"><h1>New '+esc((w.word||'Chit').toLowerCase())+'</h1><span class="mute">Two taps</span></div>';
@@ -4266,10 +4264,7 @@ if(window.__KMW){
     h+='<div class="card stack"><div class="f"><b>2. How many people?</b></div><div class="qstep"><button data-act="qn" data-d="-1" aria-label="Fewer">−</button><input readonly value="'+w.members.length+'" aria-label="People"><button data-act="qn" data-d="1" aria-label="More">+</button></div><div class="small mute">Everyone gets exactly one month, so the chit runs for as many months as there are people.</div></div>';
     h+='<div class="card stack"><label class="f"><b>3. Which month does it start?</b><input type="month" data-w="first" value="'+esc(w.first)+'"></label></div>';
     h+='<div class="qsum" id="qsum">'+qSumHtml(w)+'</div>';
-    h+='<div class="card stack"><div class="f"><b>Who is in?</b></div>'+w.members.map(function(m,i){return '<div class="row" style="flex-wrap:nowrap"><input data-wm="'+m.id+':name" placeholder="Name '+(i+1)+'" value="'+esc(m.name)+'" autocomplete="off"></div>';}).join('')+'</div>';
-    var named=w.members.filter(function(m){return (m.name||'').trim();});
-    h+='<div class="card stack"><label class="f">Treasurer (conducts the draw and payouts)<select data-w="tre"><option value="">Choose…</option>'+named.map(function(m){return '<option value="'+m.id+'"'+(w.tre===m.id?' selected':'')+'>'+esc(m.name)+'</option>';}).join('')+'</select></label>';
-    h+='<label class="f">Which one is you?<select data-w="me"><option value="">Choose…</option>'+named.map(function(m){return '<option value="'+m.id+'"'+(w.me===m.id?' selected':'')+'>'+esc(m.name)+'</option>';}).join('')+'</select></label></div>';
+    h+='<div class="card stack"><div class="f"><b>Who is in?</b></div><div class="small mute">Type each name. Then tap <b>Treasurer</b> beside the person who runs the chit, and <b>Me</b> beside your own name.</div>'+w.members.map(function(m,i){return '<div class="row" style="flex-wrap:nowrap;gap:6px"><input style="flex:1;min-width:0" data-wm="'+m.id+':name" placeholder="Name '+(i+1)+'" value="'+esc(m.name)+'" autocomplete="off"><button type="button" class="chip'+(w.tre===m.id?' on':'')+'" style="padding:8px 10px;white-space:nowrap" data-act="qwho" data-k="tre" data-id="'+m.id+'">Treasurer</button><button type="button" class="chip'+(w.me===m.id?' on':'')+'" style="padding:8px 10px;white-space:nowrap" data-act="qwho" data-k="me" data-id="'+m.id+'">Me</button></div>';}).join('')+'</div>';
     h+='<div class="small mute">Defaults: due on the 5th, payout on the 10th, 3 grace days, no fine, winner collects, everyone sees all amounts, draw all months once before you start.</div>';
     h+='<button class="linkbtn" data-act="qmore">More rules: fines, due days, currency, draw mode</button>';
     if(w.err)h+='<div class="err" id="werr">'+esc(w.err)+'</div>';
@@ -4282,6 +4277,10 @@ if(window.__KMW){
     else{if(w.members.length<=2){toast('Keep at least two people.','warn');return;}var m=w.members.slice().reverse().filter(function(x){return !(x.name||'').trim();})[0]||w.members[w.members.length-1];
       w.members=w.members.filter(function(x){return x!==m;});if(w.tre===m.id)w.tre='';if(w.me===m.id)w.me='';}
     w.err='';render(true);};
+  ACT.qwho=function(t){var w=S.wiz;if(!w)return;var k=t.getAttribute('data-k'),id=t.getAttribute('data-id');
+    var m=w.members.filter(function(x){return x.id===id;})[0];
+    if(!m||!(m.name||'').trim()){toast('Type this person\u2019s name first.','warn');return;}
+    w[k]=(w[k]===id)?'':id;if(k==='tre'&&w.cos===id)w.cos='';w.err='';render(true);};
   ACT.qmore=function(){var w=S.wiz;if(!w)return;w.quick=false;w.step=1;w.err='';render(true);try{window.scrollTo(0,0);}catch(e){}};
   ACT.qgo=function(){
     var w=S.wiz;if(!w)return;
@@ -4292,7 +4291,7 @@ if(window.__KMW){
   };
 })();
 
-/* ===== v34: search for a place with Google ===== */
+/* ===== v35: search for a place with Google ===== */
 (function(){
   function key(){return (window.KM_CONFIG&&window.KM_CONFIG.maps)||'';}
   var last='',tok='',ctl=null,list=[];
@@ -4354,7 +4353,7 @@ if(window.__KMW){
   };
 })();
 
-/* ===== v34: one tap to bring the copied Maps place back ===== */
+/* ===== v35: one tap to bring the copied Maps place back ===== */
 ACT.pgpaste=function(){
   var lk=document.getElementById('pmaplink');if(!lk)return;
   var use=function(t){
