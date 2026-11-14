@@ -3815,7 +3815,8 @@ if(LITE){
      +'<label class="f">Place link from Google Maps, optional<textarea id="pmaplink" rows="2" placeholder="Paste the Google Maps link here" autocomplete="off">'+esc(link||'')+'</textarea></label>'
      +'<div id="pmapsnote" class="tiny mute">'+esc(note||'')+'</div>'
      +'<div class="row" style="flex-wrap:nowrap"><a id="pgs" class="btn sm" style="flex:1;text-decoration:none;display:flex;justify-content:center;align-items:center" target="_blank" rel="noopener" href="#" data-act="pgs">🔍 Search on Google Maps</a><button class="btn sm" style="flex:1" data-act="pask">✨ Ask Sakhi</button></div>'
-     +'<div class="tiny mute">On Google Maps tap Share, then Copy, and paste the link above. The place name fills in by itself. Or ask Sakhi, then tap Use this place.</div>';
+     +'<button type="button" class="btn sm" style="width:100%" data-act="pgpaste">\uD83D\uDCCB Paste the place I copied</button>'
+     +'<div class="tiny mute">1. Tap Search on Google Maps and choose your place. 2. Tap Share, then Copy. 3. Come back here and tap Paste the place I copied. The name fills in by itself. Or ask Sakhi, then tap Use this place.</div>';
   };
   /* a short link (maps.app.goo.gl) has no name in it: open it through a public relay and read the place name */
   var plFetch=function(url,ms){
@@ -4209,7 +4210,7 @@ if(window.__KMW){
      +'</div>'+(role==='in'&&!n.own?'<div class="notice info small">Want to run your own chit? Tap <b>Treasurer</b>.</div>':'');
   };
   homeShowCode=function(){return (CTX_ROLE||homeTab())==='in';};
-  roleTag=function(c){var m=mineChit(c);return '<div class="tiny"><span class="pill '+(m?'s-ready':'s-info')+'">'+(m?'You are the treasurer':'You are a member')+'</span> <span class="tiny mute">v31</span></div>';};
+  roleTag=function(c){var m=mineChit(c);return '<div class="tiny"><span class="pill '+(m?'s-ready':'s-info')+'">'+(m?'You are the treasurer':'You are a member')+'</span> <span class="tiny mute">v32</span></div>';};
   ACT.htab=function(t,id){try{localStorage.setItem('km_home_tab',id==='in'?'in':id==='req'?'req':'run');}catch(e){}render(true);};
   var _vh=viewHome;
   viewHome=function(){
@@ -4232,7 +4233,7 @@ if(window.__KMW){
   ACT.skgpt=function(){toast('Sakhi answers from a built-in list on this website. Smart answers are not switched on yet.');};
 }
 
-/* ===== v31: two-taps chit setup ===== */
+/* ===== v32: two-taps chit setup ===== */
 (function(){
   var st=document.createElement('style');
   st.textContent='.qstep{display:flex;align-items:center;gap:10px}.qstep button{width:52px;height:52px;border-radius:14px;border:1px solid var(--line);background:var(--card);color:var(--pri,#7a2e6e);font-size:26px;font-weight:800;cursor:pointer;flex:0 0 auto}.qstep input{flex:1;min-width:0;text-align:center;font-size:26px;font-weight:800}.qsum{background:var(--soft,#f6e9f3);border-radius:14px;padding:14px}.qsum .big{font-size:28px;font-weight:800}#pplsug2 .btn{white-space:normal}';
@@ -4291,7 +4292,7 @@ if(window.__KMW){
   };
 })();
 
-/* ===== v31: search for a place with Google ===== */
+/* ===== v32: search for a place with Google ===== */
 (function(){
   function key(){return (window.KM_CONFIG&&window.KM_CONFIG.maps)||'';}
   var last='',tok='',ctl=null,list=[];
@@ -4334,5 +4335,16 @@ if(window.__KMW){
     if(typeof pgsRefresh==='function')pgsRefresh();
   };
 })();
+
+/* ===== v32: one tap to bring the copied Maps place back ===== */
+ACT.pgpaste=function(){
+  var lk=document.getElementById('pmaplink');if(!lk)return;
+  var use=function(t){
+    if(!/https?:\/\//.test(t||'')){toast('Nothing copied yet. In Google Maps tap Share, then Copy, then come back here.','warn');return;}
+    lk.value=String(t).trim();lk.dispatchEvent(new Event('input',{bubbles:true}));
+  };
+  try{navigator.clipboard.readText().then(use,function(){toast('Press and hold the link box, then tap Paste.','warn');try{lk.focus();}catch(e){}});}
+  catch(e){try{lk.focus();}catch(x){}}
+};
 boot();
 })();</script><script>if("serviceWorker" in navigator&&location.protocol.indexOf("http")===0){window.addEventListener("load",function(){navigator.serviceWorker.register("sw.js").catch(function(){});});}</script></body></html>
